@@ -1,4 +1,10 @@
 class SupabaseConfig {
-  static const String supabaseUrl = '여기에_SUPABASE_URL';
-  static const String supabaseAnonKey = '여기에_SUPABASE_ANON_KEY';
+
+  // 수정1차: Supabase 프로젝트 URL
+  static const String supabaseUrl =
+      'https://ureyrsnpcqvpkxvhanqj.supabase.co';
+
+  // 수정1차: Supabase anon key
+  static const String supabaseAnonKey =
+      'sb_publishable_lfkp3C-g_nCJgQen1XfkJA_kXqdMnAF';
 }
