@@ -30,6 +30,25 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
 
   bool _isLoading = false;
 
+  // 수정2차: 실시간 중복체크 상태값
+  String? _loginIdCheckMessage;
+  String? _phoneCheckMessage;
+  String? _emailCheckMessage;
+
+  bool _isLoginIdDuplicate = false;
+  bool _isPhoneDuplicate = false;
+  bool _isEmailDuplicate = false;
+
+  // 수정2차: 중복체크 로딩 상태
+  bool _isCheckingLoginId = false;
+  bool _isCheckingPhone = false;
+  bool _isCheckingEmail = false;
+
+  // 수정2차: 비동기 중복체크 역전 방지용 시퀀스
+  int _loginIdCheckSeq = 0;
+  int _phoneCheckSeq = 0;
+  int _emailCheckSeq = 0;
+
   bool _agreeTerms = false;
   bool _agreePrivacy = false;
   bool _agreeMarketing = false;
@@ -68,6 +87,201 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     }
   }
 
+  // 수정1차: profiles 테이블 기준 ID 중복 확인
+  Future<bool> _isDuplicateLoginId(String loginId) async {
+    final dynamic result = await _supabase
+        .from('profiles')
+        .select('id')
+        .eq('login_id', loginId)
+        .maybeSingle();
+
+    return result != null;
+  }
+
+  // 수정1차: profiles 테이블 기준 연락처 중복 확인
+  Future<bool> _isDuplicatePhone(String phone) async {
+    final dynamic result = await _supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+
+    return result != null;
+  }
+
+  // 수정1차: profiles 테이블 기준 이메일 중복 확인
+  Future<bool> _isDuplicateEmailInProfile(String email) async {
+    final dynamic result = await _supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+    return result != null;
+  }
+
+  // 수정2차: ID 실시간 중복체크
+  Future<void> _checkLoginIdDuplicateLive(String value) async {
+    final String loginId = value.trim();
+    final int currentSeq = ++_loginIdCheckSeq;
+
+    if (loginId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingLoginId = false;
+        _isLoginIdDuplicate = false;
+        _loginIdCheckMessage = null;
+      });
+      return;
+    }
+
+    if (!_isValidLoginId(loginId)) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingLoginId = false;
+        _isLoginIdDuplicate = false;
+        _loginIdCheckMessage = 'ID는 4~20자 영문, 숫자, 밑줄(_)만 가능합니다.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingLoginId = true;
+      _isLoginIdDuplicate = false;
+      _loginIdCheckMessage = 'ID 확인 중입니다...';
+    });
+
+    try {
+      final bool isDuplicate = await _isDuplicateLoginId(loginId);
+
+      if (!mounted || currentSeq != _loginIdCheckSeq) return;
+
+      setState(() {
+        _isCheckingLoginId = false;
+        _isLoginIdDuplicate = isDuplicate;
+        _loginIdCheckMessage =
+        isDuplicate ? '이미 사용 중인 ID입니다.' : '사용 가능한 ID입니다.';
+      });
+    } catch (_) {
+      if (!mounted || currentSeq != _loginIdCheckSeq) return;
+
+      setState(() {
+        _isCheckingLoginId = false;
+        _isLoginIdDuplicate = false;
+        _loginIdCheckMessage = 'ID 중복 확인 중 오류가 발생했습니다.';
+      });
+    }
+  }
+
+  // 수정2차: 연락처 실시간 중복체크
+  Future<void> _checkPhoneDuplicateLive(String value) async {
+    final String phone = value.trim();
+    final int currentSeq = ++_phoneCheckSeq;
+
+    if (phone.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingPhone = false;
+        _isPhoneDuplicate = false;
+        _phoneCheckMessage = null;
+      });
+      return;
+    }
+
+    if (!_isValidPhone(phone)) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingPhone = false;
+        _isPhoneDuplicate = false;
+        _phoneCheckMessage = '연락처 형식이 올바르지 않습니다.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingPhone = true;
+      _isPhoneDuplicate = false;
+      _phoneCheckMessage = '연락처 확인 중입니다...';
+    });
+
+    try {
+      final bool isDuplicate = await _isDuplicatePhone(phone);
+
+      if (!mounted || currentSeq != _phoneCheckSeq) return;
+
+      setState(() {
+        _isCheckingPhone = false;
+        _isPhoneDuplicate = isDuplicate;
+        _phoneCheckMessage =
+        isDuplicate ? '이미 사용 중인 연락처입니다.' : '사용 가능한 연락처입니다.';
+      });
+    } catch (_) {
+      if (!mounted || currentSeq != _phoneCheckSeq) return;
+
+      setState(() {
+        _isCheckingPhone = false;
+        _isPhoneDuplicate = false;
+        _phoneCheckMessage = '연락처 중복 확인 중 오류가 발생했습니다.';
+      });
+    }
+  }
+
+  // 수정2차: 이메일 실시간 중복체크
+  Future<void> _checkEmailDuplicateLive() async {
+    final String email = _buildRegisterEmail();
+    final int currentSeq = ++_emailCheckSeq;
+
+    if (email.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingEmail = false;
+        _isEmailDuplicate = false;
+        _emailCheckMessage = null;
+      });
+      return;
+    }
+
+    if (!_isValidEmail(email)) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingEmail = false;
+        _isEmailDuplicate = false;
+        _emailCheckMessage = '이메일 형식이 올바르지 않습니다.';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingEmail = true;
+      _isEmailDuplicate = false;
+      _emailCheckMessage = '이메일 확인 중입니다...';
+    });
+
+    try {
+      final bool isDuplicate = await _isDuplicateEmailInProfile(email);
+
+      if (!mounted || currentSeq != _emailCheckSeq) return;
+
+      setState(() {
+        _isCheckingEmail = false;
+        _isEmailDuplicate = isDuplicate;
+        _emailCheckMessage =
+        isDuplicate ? '이미 가입된 이메일입니다.' : '사용 가능한 이메일입니다.';
+      });
+    } catch (_) {
+      if (!mounted || currentSeq != _emailCheckSeq) return;
+
+      setState(() {
+        _isCheckingEmail = false;
+        _isEmailDuplicate = false;
+        _emailCheckMessage = '이메일 중복 확인 중 오류가 발생했습니다.';
+      });
+    }
+  }
+
   Future<void> _signUp() async {
     final String loginId = _registerIdController.text.trim();
     final String password = _registerPasswordController.text.trim();
@@ -78,69 +292,91 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     final String email = _buildRegisterEmail();
 
     if (loginId.isEmpty) {
-      _showMessage('ID를 입력해 주세요.');
+      await _showMessageDialog('ID를 입력해 주세요.');
       return;
     }
 
     if (!_isValidLoginId(loginId)) {
-      _showMessage('ID는 4~20자 영문, 숫자, 밑줄(_)만 사용할 수 있습니다.');
+      await _showMessageDialog('ID는 4~20자 영문, 숫자, 밑줄(_)만 사용할 수 있습니다.');
       return;
     }
 
     if (!_isValidPassword(password)) {
-      _showMessage(
+      await _showMessageDialog(
         '비밀번호는 최소 8자리, 소문자와 숫자를 포함하고 연속 숫자를 사용할 수 없습니다.',
       );
       return;
     }
 
     if (password != passwordConfirm) {
-      _showMessage('비밀번호와 비밀번호 확인이 일치하지 않습니다.');
+      await _showMessageDialog('비밀번호와 비밀번호 확인이 일치하지 않습니다.');
       return;
     }
 
     if (userName.isEmpty) {
-      _showMessage('사용자명을 입력해 주세요.');
+      await _showMessageDialog('사용자명을 입력해 주세요.');
       return;
     }
 
     if (phone.isEmpty) {
-      _showMessage('연락처를 입력해 주세요.');
+      await _showMessageDialog('연락처를 입력해 주세요.');
       return;
     }
 
     if (!_isValidPhone(phone)) {
-      _showMessage('연락처 형식이 올바르지 않습니다.');
+      await _showMessageDialog('연락처 형식이 올바르지 않습니다.');
       return;
     }
 
     if (_registerEmailIdController.text.trim().isEmpty) {
-      _showMessage('이메일 아이디를 입력해 주세요.');
+      await _showMessageDialog('이메일 아이디를 입력해 주세요.');
       return;
     }
 
     if (_selectedEmailDomain == null) {
-      _showMessage('이메일 도메인을 선택해 주세요.');
+      await _showMessageDialog('이메일 도메인을 선택해 주세요.');
       return;
     }
 
     if (email.isEmpty) {
-      _showMessage('이메일을 입력해 주세요.');
+      await _showMessageDialog('이메일을 입력해 주세요.');
       return;
     }
 
     if (!_isValidEmail(email)) {
-      _showMessage('이메일 형식이 올바르지 않습니다.');
+      await _showMessageDialog('이메일 형식이 올바르지 않습니다.');
       return;
     }
 
     if (!_agreeTerms) {
-      _showMessage('이용약관 동의가 필요합니다.');
+      await _showMessageDialog('이용약관 동의가 필요합니다.');
       return;
     }
 
     if (!_agreePrivacy) {
-      _showMessage('개인정보 수집 및 이용 동의가 필요합니다.');
+      await _showMessageDialog('개인정보 수집 및 이용 동의가 필요합니다.');
+      return;
+    }
+
+    // 수정2차: 회원가입 직전 실시간 상태 재검증
+    await _checkLoginIdDuplicateLive(loginId);
+    await _checkPhoneDuplicateLive(phone);
+    await _checkEmailDuplicateLive();
+
+    if (!mounted) return;
+
+    if (_isLoginIdDuplicate) {
+      await _showMessageDialog('이미 사용 중인 ID입니다.');
+      return;
+    }
+
+    if (_isPhoneDuplicate) {
+      await _showMessageDialog('이미 사용 중인 연락처입니다.');
+      return;
+    }
+
+    if (_isEmailDuplicate) {
+      await _showMessageDialog('이미 가입된 이메일입니다.');
       return;
     }
 
@@ -166,12 +402,12 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
 
       if (user == null) {
         if (!mounted) return;
-        _showMessage('회원가입 응답은 받았지만 사용자 정보가 없습니다.');
+        await _showMessageDialog('회원가입 응답은 받았지만 사용자 정보가 없습니다.');
         return;
       }
 
       try {
-        await _supabase.from('profile').upsert({
+        await _supabase.from('profiles').upsert({
           'id': user.id,
           'email': email,
           'login_id': loginId,
@@ -183,25 +419,31 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
         });
       } on PostgrestException catch (e) {
         if (!mounted) return;
-        _showMessage('Auth 가입은 완료되었지만 profile 저장 실패: ${e.message}');
+        await _showMessageDialog('Auth 가입은 완료되었지만 profiles 저장 실패: ${e.message}');
         return;
       } catch (e) {
         if (!mounted) return;
-        _showMessage('Auth 가입은 완료되었지만 profile 저장 중 오류: $e');
+        await _showMessageDialog('Auth 가입은 완료되었지만 profiles 저장 중 오류: $e');
         return;
       }
 
       if (!mounted) return;
 
-      _showMessage('회원가입이 완료되었습니다.');
+      await _showMessageDialog('회원가입이 완료되었습니다.');
       _clearRegisterForm();
       widget.onCloseRegisterView();
     } on AuthException catch (e) {
       if (!mounted) return;
-      _showMessage('회원가입 실패: ${e.message}');
+
+      if (e.message.toLowerCase().contains('already registered')) {
+        await _showMessageDialog('이미 가입된 이메일입니다.');
+        return;
+      }
+
+      await _showMessageDialog('회원가입 실패: ${e.message}');
     } catch (e) {
       if (!mounted) return;
-      _showMessage('회원가입 중 오류: $e');
+      await _showMessageDialog('회원가입 중 오류: $e');
     } finally {
       if (!mounted) return;
       setState(() {
@@ -223,6 +465,14 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     _agreeTerms = false;
     _agreePrivacy = false;
     _agreeMarketing = false;
+
+    _loginIdCheckMessage = null;
+    _phoneCheckMessage = null;
+    _emailCheckMessage = null;
+
+    _isLoginIdDuplicate = false;
+    _isPhoneDuplicate = false;
+    _isEmailDuplicate = false;
   }
 
   void _onPhoneChanged(String value) {
@@ -245,6 +495,8 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
     );
+
+    _checkPhoneDuplicateLive(formatted);
   }
 
   String _buildRegisterEmail() {
@@ -311,11 +563,14 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     final String email = _buildRegisterEmail();
 
     return _isValidLoginId(loginId) &&
+        !_isLoginIdDuplicate &&
         _isValidPassword(password) &&
         password == passwordConfirm &&
         userName.isNotEmpty &&
         _isValidPhone(phone) &&
+        !_isPhoneDuplicate &&
         _isValidEmail(email) &&
+        !_isEmailDuplicate &&
         _agreeTerms &&
         _agreePrivacy &&
         !_isLoading;
@@ -343,13 +598,50 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     );
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF111827),
-        content: Text(
-          message,
-          style: const TextStyle(color: Colors.white),
+  Future<void> _showMessageDialog(String message) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            '안내',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('확인'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFieldMessage({
+    required String? message,
+    required bool isError,
+  }) {
+    if (message == null || message.isEmpty) {
+      return const SizedBox(height: 18);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        message,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isError
+              ? const Color(0xFFDC2626)
+              : const Color(0xFF059669),
         ),
       ),
     );
@@ -445,6 +737,8 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     ValueChanged<String>? onChanged,
     String? helperText,
     Widget? trailingLabel,
+    String? statusMessage,
+    bool statusIsError = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,6 +755,10 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
           keyboardType: keyboardType,
           onChanged: onChanged,
           decoration: _inputDecoration(hintText: hintText),
+        ),
+        _buildFieldMessage(
+          message: statusMessage,
+          isError: statusIsError,
         ),
       ],
     );
@@ -511,8 +809,59 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
           setState(() {
             _selectedEmailDomain = value;
           });
+          _checkEmailDuplicateLive();
         },
       ),
+    );
+  }
+
+  Widget _buildEmailFieldBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel(title: '이메일'),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _registerEmailIdController,
+                onChanged: (_) => _checkEmailDuplicateLive(),
+                decoration: _inputDecoration(
+                  hintText: '이메일 아이디',
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                '@',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _selectedEmailDomain == 'direct'
+                  ? TextField(
+                controller: _registerEmailDomainDirectController,
+                onChanged: (_) => _checkEmailDuplicateLive(),
+                decoration: _inputDecoration(
+                  hintText: '직접입력',
+                ),
+              )
+                  : _buildEmailDomainDropdown(),
+            ),
+          ],
+        ),
+        _buildFieldMessage(
+          message: _emailCheckMessage,
+          isError: _isEmailDuplicate ||
+              _emailCheckMessage == '이메일 형식이 올바르지 않습니다.' ||
+              _emailCheckMessage == '이메일 중복 확인 중 오류가 발생했습니다.',
+        ),
+      ],
     );
   }
 
@@ -583,6 +932,13 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                               title: 'ID',
                               controller: _registerIdController,
                               hintText: 'ID',
+                              onChanged: _checkLoginIdDuplicateLive,
+                              statusMessage: _loginIdCheckMessage,
+                              statusIsError: _isLoginIdDuplicate ||
+                                  _loginIdCheckMessage ==
+                                      'ID는 4~20자 영문, 숫자, 밑줄(_)만 가능합니다.' ||
+                                  _loginIdCheckMessage ==
+                                      'ID 중복 확인 중 오류가 발생했습니다.',
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -635,51 +991,16 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                               hintText: '010-1234-5678',
                               keyboardType: TextInputType.phone,
                               onChanged: _onPhoneChanged,
+                              statusMessage: _phoneCheckMessage,
+                              statusIsError: _isPhoneDuplicate ||
+                                  _phoneCheckMessage == '연락처 형식이 올바르지 않습니다.' ||
+                                  _phoneCheckMessage ==
+                                      '연락처 중복 확인 중 오류가 발생했습니다.',
                             ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildFieldLabel(title: '이메일'),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _registerEmailIdController,
-                                        decoration: _inputDecoration(
-                                          hintText: '이메일 아이디',
-                                        ),
-                                      ),
-                                    ),
-                                    const Padding(
-                                      padding:
-                                      EdgeInsets.symmetric(horizontal: 8),
-                                      child: Text(
-                                        '@',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: _selectedEmailDomain == 'direct'
-                                          ? TextField(
-                                        controller:
-                                        _registerEmailDomainDirectController,
-                                        decoration: _inputDecoration(
-                                          hintText: '직접입력',
-                                        ),
-                                      )
-                                          : _buildEmailDomainDropdown(),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                            child: _buildEmailFieldBlock(),
                           ),
                         ],
                       ),
@@ -692,6 +1013,12 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                         title: 'ID',
                         controller: _registerIdController,
                         hintText: 'ID',
+                        onChanged: _checkLoginIdDuplicateLive,
+                        statusMessage: _loginIdCheckMessage,
+                        statusIsError: _isLoginIdDuplicate ||
+                            _loginIdCheckMessage ==
+                                'ID는 4~20자 영문, 숫자, 밑줄(_)만 가능합니다.' ||
+                            _loginIdCheckMessage == 'ID 중복 확인 중 오류가 발생했습니다.',
                       ),
                       const SizedBox(height: 14),
                       _buildTextFieldBlock(
@@ -726,48 +1053,13 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                         hintText: '010-1234-5678',
                         keyboardType: TextInputType.phone,
                         onChanged: _onPhoneChanged,
+                        statusMessage: _phoneCheckMessage,
+                        statusIsError: _isPhoneDuplicate ||
+                            _phoneCheckMessage == '연락처 형식이 올바르지 않습니다.' ||
+                            _phoneCheckMessage == '연락처 중복 확인 중 오류가 발생했습니다.',
                       ),
                       const SizedBox(height: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildFieldLabel(title: '이메일'),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _registerEmailIdController,
-                                  decoration: _inputDecoration(
-                                    hintText: '이메일 아이디',
-                                  ),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8),
-                                child: Text(
-                                  '@',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: _selectedEmailDomain == 'direct'
-                                    ? TextField(
-                                  controller:
-                                  _registerEmailDomainDirectController,
-                                  decoration: _inputDecoration(
-                                    hintText: '직접입력',
-                                  ),
-                                )
-                                    : _buildEmailDomainDropdown(),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      _buildEmailFieldBlock(),
                     ],
                   ),
                 const SizedBox(height: 18),
@@ -784,9 +1076,8 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                       Row(
                         children: [
                           Checkbox(
-                            value: _agreeTerms &&
-                                _agreePrivacy &&
-                                _agreeMarketing,
+                            value:
+                            _agreeTerms && _agreePrivacy && _agreeMarketing,
                             onChanged: _isLoading
                                 ? null
                                 : (value) {

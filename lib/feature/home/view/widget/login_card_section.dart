@@ -4,9 +4,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class LoginCardSection extends StatefulWidget {
   final VoidCallback onOpenRegister;
 
+  // 수정2차: 로그인 성공 후 부모에게 알려주기 위한 콜백 추가
+  final VoidCallback onLoginSuccess;
+
   const LoginCardSection({
     super.key,
     required this.onOpenRegister,
+    required this.onLoginSuccess,
   });
 
   @override
@@ -29,7 +33,7 @@ class _LoginCardSectionState extends State<LoginCardSection> {
     super.dispose();
   }
 
-  // 수정1차: 로그인 처리
+  // 수정2차: 로그인 성공 시 부모 콜백 실행
   Future<void> _signIn() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
@@ -50,7 +54,11 @@ class _LoginCardSectionState extends State<LoginCardSection> {
       );
 
       if (!mounted) return;
+
       _showMessage('로그인되었습니다.');
+
+      // 수정2차: 부모 화면에 로그인 성공 알림
+      widget.onLoginSuccess();
     } on AuthException catch (e) {
       if (!mounted) return;
       _showMessage(e.message);
@@ -76,21 +84,31 @@ class _LoginCardSectionState extends State<LoginCardSection> {
       ),
       filled: true,
       fillColor: const Color(0xFFF9FAFB),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 14,
+      ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        borderSide: const BorderSide(
+          color: Color(0xFFE5E7EB),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.4),
+        borderSide: const BorderSide(
+          color: Color(0xFF2563EB),
+          width: 1.4,
+        ),
       ),
     );
   }
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+      ),
     );
   }
 
@@ -101,7 +119,9 @@ class _LoginCardSectionState extends State<LoginCardSection> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: const Color(0xFFE5E7EB),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0F000000),
@@ -134,6 +154,7 @@ class _LoginCardSectionState extends State<LoginCardSection> {
           TextField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
             decoration: _inputDecoration(
               hintText: '이메일',
             ),
@@ -143,6 +164,7 @@ class _LoginCardSectionState extends State<LoginCardSection> {
           TextField(
             controller: _passwordController,
             obscureText: true,
+            textInputAction: TextInputAction.done,
             decoration: _inputDecoration(
               hintText: '비밀번호',
             ),
@@ -190,7 +212,9 @@ class _LoginCardSectionState extends State<LoginCardSection> {
               onPressed: _isLoading ? null : widget.onOpenRegister,
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF2563EB),
-                side: const BorderSide(color: Color(0xFFD1D5DB)),
+                side: const BorderSide(
+                  color: Color(0xFFD1D5DB),
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
