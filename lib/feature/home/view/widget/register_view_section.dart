@@ -88,7 +88,9 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     }
 
     if (!_isValidPassword(password)) {
-      _showMessage('비밀번호는 최소 8자리, 소문자와 숫자를 포함하고 연속 숫자를 사용할 수 없습니다.');
+      _showMessage(
+        '비밀번호는 최소 8자리, 소문자와 숫자를 포함하고 연속 숫자를 사용할 수 없습니다.',
+      );
       return;
     }
 
@@ -162,7 +164,13 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
 
       final User? user = response.user;
 
-      if (user != null) {
+      if (user == null) {
+        if (!mounted) return;
+        _showMessage('회원가입 응답은 받았지만 사용자 정보가 없습니다.');
+        return;
+      }
+
+      try {
         await _supabase.from('profile').upsert({
           'id': user.id,
           'email': email,
@@ -173,19 +181,27 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
           'agree_privacy': _agreePrivacy,
           'agree_marketing': _agreeMarketing,
         });
+      } on PostgrestException catch (e) {
+        if (!mounted) return;
+        _showMessage('Auth 가입은 완료되었지만 profile 저장 실패: ${e.message}');
+        return;
+      } catch (e) {
+        if (!mounted) return;
+        _showMessage('Auth 가입은 완료되었지만 profile 저장 중 오류: $e');
+        return;
       }
 
       if (!mounted) return;
 
-      _showMessage('회원가입 요청이 완료되었습니다.');
+      _showMessage('회원가입이 완료되었습니다.');
       _clearRegisterForm();
       widget.onCloseRegisterView();
     } on AuthException catch (e) {
       if (!mounted) return;
-      _showMessage(e.message);
-    } catch (_) {
+      _showMessage('회원가입 실패: ${e.message}');
+    } catch (e) {
       if (!mounted) return;
-      _showMessage('회원가입 중 오류가 발생했습니다.');
+      _showMessage('회원가입 중 오류: $e');
     } finally {
       if (!mounted) return;
       setState(() {
@@ -314,7 +330,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
         color: Color(0xFF9CA3AF),
       ),
       filled: true,
-      fillColor: const Color(0xFFF9FAFB),
+      fillColor: Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -329,11 +345,16 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        backgroundColor: const Color(0xFF111827),
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
     );
   }
 
-  // 수정3차: 라벨 줄 높이를 고정해서 정렬 깨짐 방지
   Widget _buildFieldLabel({
     required String title,
     String? helperText,
@@ -379,7 +400,6 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     );
   }
 
-  // 수정3차: 칩 영역 크기 고정
   Widget _buildPasswordMatchChip() {
     if (!_passwordConfirmHasValue) {
       return const SizedBox(
@@ -446,6 +466,56 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     );
   }
 
+  Widget _buildEmailDomainDropdown() {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: DropdownButton<String>(
+        value: _selectedEmailDomain,
+        hint: const Text('선택하세요'),
+        isExpanded: true,
+        underline: const SizedBox.shrink(),
+        dropdownColor: Colors.white,
+        items: const [
+          DropdownMenuItem(
+            value: 'naver.com',
+            child: Text('naver.com'),
+          ),
+          DropdownMenuItem(
+            value: 'gmail.com',
+            child: Text('gmail.com'),
+          ),
+          DropdownMenuItem(
+            value: 'daum.net',
+            child: Text('daum.net'),
+          ),
+          DropdownMenuItem(
+            value: 'kakao.com',
+            child: Text('kakao.com'),
+          ),
+          DropdownMenuItem(
+            value: 'direct',
+            child: Text('직접입력'),
+          ),
+        ],
+        onChanged: _isLoading
+            ? null
+            : (value) {
+          setState(() {
+            _selectedEmailDomain = value;
+          });
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -502,7 +572,6 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
                 if (isWide)
                   Column(
                     children: [
@@ -605,61 +674,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                                           hintText: '직접입력',
                                         ),
                                       )
-                                          : Container(
-                                        height: 52,
-                                        padding:
-                                        const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color:
-                                          const Color(0xFFF9FAFB),
-                                          borderRadius:
-                                          BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: const Color(
-                                              0xFFE5E7EB,
-                                            ),
-                                          ),
-                                        ),
-                                        child: DropdownButton<String>(
-                                          value: _selectedEmailDomain,
-                                          hint: const Text('선택하세요'),
-                                          isExpanded: true,
-                                          underline:
-                                          const SizedBox.shrink(),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'naver.com',
-                                              child: Text('naver.com'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'gmail.com',
-                                              child: Text('gmail.com'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'daum.net',
-                                              child: Text('daum.net'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'kakao.com',
-                                              child: Text('kakao.com'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'direct',
-                                              child: Text('직접입력'),
-                                            ),
-                                          ],
-                                          onChanged: _isLoading
-                                              ? null
-                                              : (value) {
-                                            setState(() {
-                                              _selectedEmailDomain =
-                                                  value;
-                                            });
-                                          },
-                                        ),
-                                      ),
+                                          : _buildEmailDomainDropdown(),
                                     ),
                                   ],
                                 ),
@@ -747,57 +762,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                                     hintText: '직접입력',
                                   ),
                                 )
-                                    : Container(
-                                  height: 52,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF9FAFB),
-                                    borderRadius:
-                                    BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: const Color(0xFFE5E7EB),
-                                    ),
-                                  ),
-                                  child: DropdownButton<String>(
-                                    value: _selectedEmailDomain,
-                                    hint: const Text('선택하세요'),
-                                    isExpanded: true,
-                                    underline:
-                                    const SizedBox.shrink(),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'naver.com',
-                                        child: Text('naver.com'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'gmail.com',
-                                        child: Text('gmail.com'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'daum.net',
-                                        child: Text('daum.net'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'kakao.com',
-                                        child: Text('kakao.com'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'direct',
-                                        child: Text('직접입력'),
-                                      ),
-                                    ],
-                                    onChanged: _isLoading
-                                        ? null
-                                        : (value) {
-                                      setState(() {
-                                        _selectedEmailDomain =
-                                            value;
-                                      });
-                                    },
-                                  ),
-                                ),
+                                    : _buildEmailDomainDropdown(),
                               ),
                             ],
                           ),
@@ -805,14 +770,12 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                       ),
                     ],
                   ),
-
                 const SizedBox(height: 18),
-
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: const Color(0xFFE5E7EB)),
                   ),
@@ -910,9 +873,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 18),
-
                 Row(
                   children: [
                     Expanded(
@@ -921,6 +882,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
                         _isLoading ? null : widget.onCloseRegisterView,
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(52),
+                          backgroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -978,7 +940,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
         return Container(
           width: double.infinity,
           height: double.infinity,
-          color: const Color(0xFFF3F5F9),
+          color: Colors.white,
           child: useScroll
               ? SingleChildScrollView(
             padding:
