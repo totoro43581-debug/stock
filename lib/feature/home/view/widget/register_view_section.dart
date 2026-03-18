@@ -30,7 +30,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
 
   bool _isLoading = false;
 
-  // 수정2차: 실시간 중복체크 상태값
+  // 수정4차: 실시간 중복체크 상태값
   String? _loginIdCheckMessage;
   String? _phoneCheckMessage;
   String? _emailCheckMessage;
@@ -39,12 +39,12 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
   bool _isPhoneDuplicate = false;
   bool _isEmailDuplicate = false;
 
-  // 수정2차: 중복체크 로딩 상태
+  // 수정4차: 중복체크 로딩 상태
   bool _isCheckingLoginId = false;
   bool _isCheckingPhone = false;
   bool _isCheckingEmail = false;
 
-  // 수정2차: 비동기 중복체크 역전 방지용 시퀀스
+  // 수정4차: 비동기 중복체크 역전 방지용 시퀀스
   int _loginIdCheckSeq = 0;
   int _phoneCheckSeq = 0;
   int _emailCheckSeq = 0;
@@ -87,40 +87,43 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     }
   }
 
-  // 수정1차: profiles 테이블 기준 ID 중복 확인
+  // 수정4차: RPC 기준 ID 중복 확인
   Future<bool> _isDuplicateLoginId(String loginId) async {
-    final dynamic result = await _supabase
-        .from('profiles')
-        .select('id')
-        .eq('login_id', loginId)
-        .maybeSingle();
+    final dynamic result = await _supabase.rpc(
+      'check_login_id_exists',
+      params: {
+        'p_login_id': loginId,
+      },
+    );
 
-    return result != null;
+    return result == true;
   }
 
-  // 수정1차: profiles 테이블 기준 연락처 중복 확인
+  // 수정4차: RPC 기준 연락처 중복 확인
   Future<bool> _isDuplicatePhone(String phone) async {
-    final dynamic result = await _supabase
-        .from('profiles')
-        .select('id')
-        .eq('phone', phone)
-        .maybeSingle();
+    final dynamic result = await _supabase.rpc(
+      'check_phone_exists',
+      params: {
+        'p_phone': phone,
+      },
+    );
 
-    return result != null;
+    return result == true;
   }
 
-  // 수정1차: profiles 테이블 기준 이메일 중복 확인
-  Future<bool> _isDuplicateEmailInProfile(String email) async {
-    final dynamic result = await _supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle();
+  // 수정4차: RPC 기준 이메일 중복 확인
+  Future<bool> _isDuplicateEmail(String email) async {
+    final dynamic result = await _supabase.rpc(
+      'check_email_exists',
+      params: {
+        'p_email': email,
+      },
+    );
 
-    return result != null;
+    return result == true;
   }
 
-  // 수정2차: ID 실시간 중복체크
+  // 수정4차: ID 실시간 중복체크
   Future<void> _checkLoginIdDuplicateLive(String value) async {
     final String loginId = value.trim();
     final int currentSeq = ++_loginIdCheckSeq;
@@ -174,7 +177,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     }
   }
 
-  // 수정2차: 연락처 실시간 중복체크
+  // 수정4차: 연락처 실시간 중복체크
   Future<void> _checkPhoneDuplicateLive(String value) async {
     final String phone = value.trim();
     final int currentSeq = ++_phoneCheckSeq;
@@ -228,7 +231,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     }
   }
 
-  // 수정2차: 이메일 실시간 중복체크
+  // 수정4차: 이메일 실시간 중복체크
   Future<void> _checkEmailDuplicateLive() async {
     final String email = _buildRegisterEmail();
     final int currentSeq = ++_emailCheckSeq;
@@ -261,7 +264,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     });
 
     try {
-      final bool isDuplicate = await _isDuplicateEmailInProfile(email);
+      final bool isDuplicate = await _isDuplicateEmail(email);
 
       if (!mounted || currentSeq != _emailCheckSeq) return;
 
@@ -358,7 +361,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
       return;
     }
 
-    // 수정2차: 회원가입 직전 실시간 상태 재검증
+    // 수정4차: 회원가입 직전 RPC 기준 재검증
     await _checkLoginIdDuplicateLive(loginId);
     await _checkPhoneDuplicateLive(phone);
     await _checkEmailDuplicateLive();
@@ -406,27 +409,6 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
         return;
       }
 
-      try {
-        await _supabase.from('profiles').upsert({
-          'id': user.id,
-          'email': email,
-          'login_id': loginId,
-          'user_name': userName,
-          'phone': phone,
-          'agree_terms': _agreeTerms,
-          'agree_privacy': _agreePrivacy,
-          'agree_marketing': _agreeMarketing,
-        });
-      } on PostgrestException catch (e) {
-        if (!mounted) return;
-        await _showMessageDialog('Auth 가입은 완료되었지만 profiles 저장 실패: ${e.message}');
-        return;
-      } catch (e) {
-        if (!mounted) return;
-        await _showMessageDialog('Auth 가입은 완료되었지만 profiles 저장 중 오류: $e');
-        return;
-      }
-
       if (!mounted) return;
 
       await _showMessageDialog('회원가입이 완료되었습니다.');
@@ -435,7 +417,11 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     } on AuthException catch (e) {
       if (!mounted) return;
 
-      if (e.message.toLowerCase().contains('already registered')) {
+      final String message = e.message.toLowerCase();
+
+      if (message.contains('already registered') ||
+          message.contains('user already registered') ||
+          message.contains('already been registered')) {
         await _showMessageDialog('이미 가입된 이메일입니다.');
         return;
       }
@@ -473,6 +459,10 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     _isLoginIdDuplicate = false;
     _isPhoneDuplicate = false;
     _isEmailDuplicate = false;
+
+    _isCheckingLoginId = false;
+    _isCheckingPhone = false;
+    _isCheckingEmail = false;
   }
 
   void _onPhoneChanged(String value) {
