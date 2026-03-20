@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -20,6 +22,36 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // 수정1차: HomeScreen에는 화면 전환 상태만 유지
   bool _showRegisterView = false;
+
+  // 수정3차: Supabase 인증 상태 변경 감지 리스너
+  StreamSubscription<AuthState>? _authStateSubscription;
+
+  SupabaseClient get _supabase => Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 수정3차: 로그인/로그아웃 발생 시 HomeScreen 강제 갱신
+    _authStateSubscription =
+        _supabase.auth.onAuthStateChange.listen((AuthState data) {
+          if (!mounted) return;
+
+          setState(() {
+            // 수정3차: 로그인 성공 시 회원가입 화면 닫기
+            if (data.session != null) {
+              _showRegisterView = false;
+            }
+          });
+        });
+  }
+
+  @override
+  void dispose() {
+    // 수정3차: 리스너 해제
+    _authStateSubscription?.cancel();
+    super.dispose();
+  }
 
   // 수정2차: 회원가입 화면 열기
   void _openRegisterView() {
@@ -44,9 +76,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final SupabaseClient supabase = Supabase.instance.client;
-    final Session? session = supabase.auth.currentSession;
-    final User? user = supabase.auth.currentUser;
+    final Session? session = _supabase.auth.currentSession;
+    final User? user = _supabase.auth.currentUser;
 
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isWide = screenWidth >= 1100;

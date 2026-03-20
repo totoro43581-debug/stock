@@ -3,8 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginCardSection extends StatefulWidget {
   final VoidCallback onOpenRegister;
-
-  // 수정2차: 로그인 성공 후 부모에게 알려주기 위한 콜백 추가
   final VoidCallback onLoginSuccess;
 
   const LoginCardSection({
@@ -18,8 +16,8 @@ class LoginCardSection extends StatefulWidget {
 }
 
 class _LoginCardSectionState extends State<LoginCardSection> {
-  // 수정1차: 로그인 로직을 HomeScreen에서 이관
-  final TextEditingController _emailController = TextEditingController();
+  // 수정4차: 아이디 로그인용 컨트롤러
+  final TextEditingController _loginIdController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   bool _isLoading = false;
@@ -28,18 +26,18 @@ class _LoginCardSectionState extends State<LoginCardSection> {
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _loginIdController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  // 수정2차: 로그인 성공 시 부모 콜백 실행
+  // 수정4차: direct select 대신 RPC(get_email_by_login_id) 사용
   Future<void> _signIn() async {
-    final String email = _emailController.text.trim();
+    final String loginId = _loginIdController.text.trim();
     final String password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      _showMessage('이메일과 비밀번호를 입력해 주세요.');
+    if (loginId.isEmpty || password.isEmpty) {
+      _showMessage('아이디와 비밀번호를 입력해 주세요.');
       return;
     }
 
@@ -48,6 +46,21 @@ class _LoginCardSectionState extends State<LoginCardSection> {
     });
 
     try {
+      final dynamic rpcResult = await _supabase.rpc(
+        'get_email_by_login_id',
+        params: {
+          'p_login_id': loginId,
+        },
+      );
+
+      final String email = (rpcResult ?? '').toString().trim();
+
+      if (email.isEmpty) {
+        if (!mounted) return;
+        _showMessage('존재하지 않는 아이디입니다.');
+        return;
+      }
+
       await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
@@ -56,13 +69,11 @@ class _LoginCardSectionState extends State<LoginCardSection> {
       if (!mounted) return;
 
       _showMessage('로그인되었습니다.');
-
-      // 수정2차: 부모 화면에 로그인 성공 알림
       widget.onLoginSuccess();
     } on AuthException catch (e) {
       if (!mounted) return;
       _showMessage(e.message);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       _showMessage('로그인 중 오류가 발생했습니다.');
     } finally {
@@ -73,7 +84,6 @@ class _LoginCardSectionState extends State<LoginCardSection> {
     }
   }
 
-  // 수정1차: 공통 인풋 스타일을 위젯 내부로 이동
   InputDecoration _inputDecoration({
     required String hintText,
   }) {
@@ -143,24 +153,21 @@ class _LoginCardSectionState extends State<LoginCardSection> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '이메일과 비밀번호를 입력해 주세요.',
+            '아이디와 비밀번호를 입력해 주세요.',
             style: TextStyle(
               fontSize: 14,
               color: Color(0xFF6B7280),
             ),
           ),
           const SizedBox(height: 20),
-
           TextField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
+            controller: _loginIdController,
             textInputAction: TextInputAction.next,
             decoration: _inputDecoration(
-              hintText: '이메일',
+              hintText: '아이디',
             ),
           ),
           const SizedBox(height: 12),
-
           TextField(
             controller: _passwordController,
             obscureText: true,
@@ -171,7 +178,6 @@ class _LoginCardSectionState extends State<LoginCardSection> {
             onSubmitted: (_) => _signIn(),
           ),
           const SizedBox(height: 18),
-
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -204,7 +210,6 @@ class _LoginCardSectionState extends State<LoginCardSection> {
             ),
           ),
           const SizedBox(height: 12),
-
           SizedBox(
             width: double.infinity,
             height: 46,
