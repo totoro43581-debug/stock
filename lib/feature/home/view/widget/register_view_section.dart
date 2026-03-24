@@ -469,7 +469,8 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
     });
 
     try {
-      final AuthResponse response = await _supabase.auth.signUp(
+      // 수정8차: profiles 저장은 DB trigger 가 처리
+      await _supabase.auth.signUp(
         email: email,
         password: password,
         data: {
@@ -481,26 +482,6 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
           'agree_marketing': _agreeMarketing,
         },
       );
-
-      final User? user = response.user;
-
-      if (user == null) {
-        if (!mounted) return;
-        await _showMessageDialog('회원가입 응답은 받았지만 사용자 정보가 없습니다.');
-        return;
-      }
-
-      await _supabase.from('profiles').upsert({
-        'id': user.id,
-        'login_id': loginId,
-        'user_name': userName,
-        'phone': phoneDigits,
-        'email': email,
-        'role': 'user',
-        'agree_terms': _agreeTerms,
-        'agree_privacy': _agreePrivacy,
-        'agree_marketing': _agreeMarketing,
-      });
 
       if (!mounted) return;
 
@@ -525,9 +506,6 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
       }
 
       await _showMessageDialog('회원가입 실패: ${e.message}');
-    } on PostgrestException catch (e) {
-      if (!mounted) return;
-      await _showMessageDialog('프로필 저장 실패: ${e.message}');
     } catch (e) {
       if (!mounted) return;
       await _showMessageDialog('회원가입 중 오류: $e');
