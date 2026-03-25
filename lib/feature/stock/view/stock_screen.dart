@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -8,146 +9,54 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
-  // 수정1차: 검색 컨트롤러
+  // 수정2차: 검색 / 주문 입력 컨트롤러
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _quantityController =
+  TextEditingController(text: '1');
 
-  // 수정1차: 화면 상태값
+  // 수정2차: 필터 상태
   String _selectedMarketFilter = '전체';
   String _selectedSort = '등락률';
   bool _showOnlyOwned = false;
 
-  // 수정1차: 보유 현금 / 총 자산 더미값
-  double _cash = 8500000;
-  double _investedAmount = 21500000;
+  // 수정2차: 실제 보유 데이터는 아직 미연결이므로 비어있는 상태로 시작
+  final List<_StockItem> _marketItems = [];
+  final List<_HoldingItem> _holdingItems = [];
+  final List<_TradeHistoryItem> _tradeHistoryItems = [];
 
-  // 수정1차: 종목 더미 데이터
-  late List<_StockItem> _stockItems;
+  _StockItem? _selectedMarketItem;
 
-  // 수정1차: 현재 선택 종목
-  _StockItem? _selectedItem;
+  SupabaseClient get _supabase => Supabase.instance.client;
 
-  @override
-  void initState() {
-    super.initState();
+  Session? get _session => _supabase.auth.currentSession;
+  User? get _user => _supabase.auth.currentUser;
 
-    _stockItems = [
-      _StockItem(
-        code: '005930',
-        name: '삼성전자',
-        market: '국내',
-        currentPrice: 74200,
-        changeRate: 1.82,
-        changeAmount: 1320,
-        ownedQuantity: 12,
-        averagePrice: 70500,
-        description: '반도체, 모바일, 가전 등 다양한 사업을 영위하는 대표 대형주입니다.',
-      ),
-      _StockItem(
-        code: '000660',
-        name: 'SK하이닉스',
-        market: '국내',
-        currentPrice: 189500,
-        changeRate: -0.94,
-        changeAmount: -1800,
-        ownedQuantity: 4,
-        averagePrice: 176000,
-        description: '메모리 반도체 중심의 글로벌 반도체 기업입니다.',
-      ),
-      _StockItem(
-        code: '035420',
-        name: 'NAVER',
-        market: '국내',
-        currentPrice: 218000,
-        changeRate: 2.40,
-        changeAmount: 5100,
-        ownedQuantity: 0,
-        averagePrice: 0,
-        description: '검색, 커머스, 콘텐츠, 클라우드 등을 운영하는 플랫폼 기업입니다.',
-      ),
-      _StockItem(
-        code: 'AAPL',
-        name: 'Apple',
-        market: '해외',
-        currentPrice: 268500,
-        changeRate: 0.74,
-        changeAmount: 1980,
-        ownedQuantity: 3,
-        averagePrice: 251200,
-        description: '아이폰, 맥, 서비스 사업을 운영하는 글로벌 IT 기업입니다.',
-      ),
-      _StockItem(
-        code: 'MSFT',
-        name: 'Microsoft',
-        market: '해외',
-        currentPrice: 594000,
-        changeRate: 1.21,
-        changeAmount: 7100,
-        ownedQuantity: 2,
-        averagePrice: 548300,
-        description: '클라우드, 오피스, AI, 게임 등 다양한 사업을 보유한 글로벌 기업입니다.',
-      ),
-      _StockItem(
-        code: 'TSLA',
-        name: 'Tesla',
-        market: '해외',
-        currentPrice: 251300,
-        changeRate: -2.36,
-        changeAmount: -6070,
-        ownedQuantity: 1,
-        averagePrice: 280000,
-        description: '전기차 및 에너지 솔루션 중심의 글로벌 성장주입니다.',
-      ),
-    ];
-
-    _selectedItem = _stockItems.first;
-  }
+  bool get _isLoggedIn => _session != null && _user != null;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _quantityController.dispose();
     super.dispose();
   }
 
-  double get _totalStockValue {
-    return _stockItems.fold(
-      0,
-          (sum, item) => sum + (item.currentPrice * item.ownedQuantity),
-    );
-  }
-
-  double get _totalAsset {
-    return _cash + _totalStockValue;
-  }
-
-  double get _profitAmount {
-    return _stockItems.fold(
-      0,
-          (sum, item) => sum + item.profitAmount,
-    );
-  }
-
-  double get _profitRate {
-    if (_investedAmount <= 0) return 0;
-    return (_profitAmount / _investedAmount) * 100;
-  }
+  // 수정2차: 실제 자산 데이터 미연결 상태이므로 0으로 계산
+  double get _cash => 0;
+  double get _totalStockValue => 0;
+  double get _totalAsset => 0;
+  double get _totalProfitAmount => 0;
+  double get _totalProfitRate => 0;
 
   List<_StockItem> get _filteredItems {
-    List<_StockItem> result = List.of(_stockItems);
+    List<_StockItem> result = List.of(_marketItems);
 
-    // 수정1차: 시장 필터
     if (_selectedMarketFilter != '전체') {
       result = result
           .where((item) => item.market == _selectedMarketFilter)
           .toList();
     }
 
-    // 수정1차: 보유 종목만 보기
-    if (_showOnlyOwned) {
-      result = result.where((item) => item.ownedQuantity > 0).toList();
-    }
-
-    // 수정1차: 검색
-    final keyword = _searchController.text.trim().toLowerCase();
+    final String keyword = _searchController.text.trim().toLowerCase();
     if (keyword.isNotEmpty) {
       result = result.where((item) {
         return item.name.toLowerCase().contains(keyword) ||
@@ -155,16 +64,18 @@ class _StockScreenState extends State<StockScreen> {
       }).toList();
     }
 
-    // 수정1차: 정렬
+    if (_showOnlyOwned) {
+      result = result.where((item) {
+        return _holdingItems.any((holding) => holding.code == item.code);
+      }).toList();
+    }
+
     switch (_selectedSort) {
       case '등락률':
         result.sort((a, b) => b.changeRate.compareTo(a.changeRate));
         break;
       case '현재가':
         result.sort((a, b) => b.currentPrice.compareTo(a.currentPrice));
-        break;
-      case '보유수량':
-        result.sort((a, b) => b.ownedQuantity.compareTo(a.ownedQuantity));
         break;
       case '이름':
         result.sort((a, b) => a.name.compareTo(b.name));
@@ -180,101 +91,135 @@ class _StockScreenState extends State<StockScreen> {
     return const Color(0xFF6B7280);
   }
 
-  String _formatPrice(double value) {
+  String _formatPrice(num value) {
     return value.toStringAsFixed(0).replaceAllMapped(
       RegExp(r'\B(?=(\d{3})+(?!\d))'),
           (match) => ',',
     );
   }
 
-  String _formatSignedPrice(double value) {
-    final prefix = value > 0 ? '+' : '';
+  String _formatSignedPrice(num value) {
+    final String prefix = value > 0 ? '+' : '';
     return '$prefix${_formatPrice(value)}';
   }
 
   String _formatSignedPercent(double value) {
-    final prefix = value > 0 ? '+' : '';
+    final String prefix = value > 0 ? '+' : '';
     return '$prefix${value.toStringAsFixed(2)}%';
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _handleBuy() {
+    if (!_isLoggedIn) {
+      _showSnackBar('로그인 후 이용 가능합니다.');
+      return;
+    }
+
+    _showSnackBar('실제 매수 기능은 보유 현금 / 종목 테이블 연결 후 구현합니다.');
+  }
+
+  void _handleSell() {
+    if (!_isLoggedIn) {
+      _showSnackBar('로그인 후 이용 가능합니다.');
+      return;
+    }
+
+    _showSnackBar('실제 매도 기능은 보유 종목 / 거래내역 테이블 연결 후 구현합니다.');
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredItems = _filteredItems;
-    final selectedItem = _selectedItem;
+    final List<_StockItem> filteredItems = _filteredItems;
 
     return Container(
       width: double.infinity,
       height: double.infinity,
-      color: const Color(0xFFF5F7FA),
+      color: const Color(0xFFF3F5F9),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 1280;
-          final isTablet = constraints.maxWidth >= 900;
+          final bool isWide = constraints.maxWidth >= 1280;
+          final bool isTablet = constraints.maxWidth >= 900;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 700),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 수정1차: 상단 제목 영역
-                  _buildHeader(),
-
-                  const SizedBox(height: 20),
-
-                  // 수정1차: 자산 요약 카드 영역
-                  _buildSummarySection(),
-
-                  const SizedBox(height: 20),
-
-                  // 수정1차: 검색/필터 영역
-                  _buildFilterSection(),
-
-                  const SizedBox(height: 20),
-
-                  if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 7,
-                          child: _buildStockListSection(filteredItems),
-                        ),
-                        const SizedBox(width: 20),
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            children: [
-                              _buildDetailSection(selectedItem),
-                              const SizedBox(height: 20),
-                              _buildTradeSection(selectedItem),
-                            ],
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1400),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 20),
+                    _buildSummarySection(),
+                    const SizedBox(height: 20),
+                    _buildLoginNoticeSection(),
+                    const SizedBox(height: 20),
+                    _buildFilterSection(),
+                    const SizedBox(height: 20),
+                    if (isWide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 7,
+                            child: Column(
+                              children: [
+                                _buildStockListSection(filteredItems),
+                                const SizedBox(height: 20),
+                                _buildTradeHistorySection(),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    )
-                  else if (isTablet)
-                    Column(
-                      children: [
-                        _buildStockListSection(filteredItems),
-                        const SizedBox(height: 20),
-                        _buildDetailSection(selectedItem),
-                        const SizedBox(height: 20),
-                        _buildTradeSection(selectedItem),
-                      ],
-                    )
-                  else
-                    Column(
-                      children: [
-                        _buildStockListSection(filteredItems),
-                        const SizedBox(height: 16),
-                        _buildDetailSection(selectedItem),
-                        const SizedBox(height: 16),
-                        _buildTradeSection(selectedItem),
-                      ],
-                    ),
-                ],
+                          const SizedBox(width: 20),
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              children: [
+                                _buildDetailSection(),
+                                const SizedBox(height: 20),
+                                _buildTradeSection(),
+                                const SizedBox(height: 20),
+                                _buildChartPlaceholderSection(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (isTablet)
+                      Column(
+                        children: [
+                          _buildStockListSection(filteredItems),
+                          const SizedBox(height: 20),
+                          _buildDetailSection(),
+                          const SizedBox(height: 20),
+                          _buildTradeSection(),
+                          const SizedBox(height: 20),
+                          _buildChartPlaceholderSection(),
+                          const SizedBox(height: 20),
+                          _buildTradeHistorySection(),
+                        ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          _buildStockListSection(filteredItems),
+                          const SizedBox(height: 16),
+                          _buildDetailSection(),
+                          const SizedBox(height: 16),
+                          _buildTradeSection(),
+                          const SizedBox(height: 16),
+                          _buildChartPlaceholderSection(),
+                          const SizedBox(height: 16),
+                          _buildTradeHistorySection(),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
           );
@@ -286,50 +231,68 @@ class _StockScreenState extends State<StockScreen> {
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF0F172A),
+            Color(0xFF1E293B),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEF2FF),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              Icons.show_chart_rounded,
-              size: 28,
-              color: Color(0xFF4F46E5),
-            ),
-          ),
-          const SizedBox(width: 16),
           const Expanded(
+            flex: 7,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '주식',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 30,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF111827),
+                    color: Colors.white,
                   ),
                 ),
-                SizedBox(height: 6),
+                SizedBox(height: 10),
                 Text(
-                  '종목 조회, 보유 자산 확인, 매수/매도 체험을 한 화면에서 진행합니다.',
+                  '로그인 상태와 실제 보유 데이터 기준으로 자산, 보유종목, 거래내역이 표시됩니다.',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFF6B7280),
-                    height: 1.5,
+                    color: Color(0xFFCBD5E1),
+                    height: 1.6,
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.12),
+              ),
+            ),
+            child: Text(
+              _isLoggedIn ? '로그인 상태' : '비로그인 상태',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
           ),
         ],
@@ -338,37 +301,37 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Widget _buildSummarySection() {
+    final List<Widget> cards = [
+      _buildSummaryCard(
+        title: '총 자산',
+        value: '₩ ${_formatPrice(_totalAsset)}',
+        subValue: _isLoggedIn ? '실제 자산 연결 전' : '비로그인 상태',
+        valueColor: const Color(0xFF111827),
+      ),
+      _buildSummaryCard(
+        title: '보유 현금',
+        value: '₩ ${_formatPrice(_cash)}',
+        subValue: _isLoggedIn ? '지갑 데이터 연결 전' : '비로그인 상태',
+        valueColor: const Color(0xFF111827),
+      ),
+      _buildSummaryCard(
+        title: '주식 평가금',
+        value: '₩ ${_formatPrice(_totalStockValue)}',
+        subValue: _isLoggedIn ? '보유 종목 없음' : '비로그인 상태',
+        valueColor: const Color(0xFF111827),
+      ),
+      _buildSummaryCard(
+        title: '총 손익',
+        value: '${_formatSignedPrice(_totalProfitAmount)}원',
+        subValue: _formatSignedPercent(_totalProfitRate),
+        valueColor: _changeColor(_totalProfitAmount),
+      ),
+    ];
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 1100;
-        final isTablet = constraints.maxWidth >= 700;
-
-        final cards = [
-          _buildSummaryCard(
-            title: '총 자산',
-            value: '${_formatPrice(_totalAsset)}원',
-            subValue: '현금 + 보유 주식 평가금액',
-            valueColor: const Color(0xFF111827),
-          ),
-          _buildSummaryCard(
-            title: '보유 현금',
-            value: '${_formatPrice(_cash)}원',
-            subValue: '즉시 매수 가능 금액',
-            valueColor: const Color(0xFF111827),
-          ),
-          _buildSummaryCard(
-            title: '주식 평가금액',
-            value: '${_formatPrice(_totalStockValue)}원',
-            subValue: '현재가 기준 보유 종목 합계',
-            valueColor: const Color(0xFF111827),
-          ),
-          _buildSummaryCard(
-            title: '평가손익',
-            value: '${_formatSignedPrice(_profitAmount)}원',
-            subValue: _formatSignedPercent(_profitRate),
-            valueColor: _changeColor(_profitAmount),
-          ),
-        ];
+        final bool isWide = constraints.maxWidth >= 1100;
+        final bool isTablet = constraints.maxWidth >= 700;
 
         if (isWide) {
           return Row(
@@ -425,8 +388,15 @@ class _StockScreenState extends State<StockScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -435,7 +405,7 @@ class _StockScreenState extends State<StockScreen> {
             title,
             style: const TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: Color(0xFF6B7280),
             ),
           ),
@@ -443,7 +413,7 @@ class _StockScreenState extends State<StockScreen> {
           Text(
             value,
             style: TextStyle(
-              fontSize: 24,
+              fontSize: 26,
               fontWeight: FontWeight.w800,
               color: valueColor,
             ),
@@ -461,13 +431,52 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  Widget _buildLoginNoticeSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _isLoggedIn ? Colors.white : const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: _isLoggedIn
+              ? const Color(0xFFE5E7EB)
+              : const Color(0xFFFCD34D),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _isLoggedIn ? Icons.info_outline_rounded : Icons.lock_outline_rounded,
+            color: _isLoggedIn
+                ? const Color(0xFF2563EB)
+                : const Color(0xFFB45309),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _isLoggedIn
+                  ? '현재 계정 기준 실제 자산/보유종목/거래내역 테이블 연결이 아직 안 되어 있어 0으로 표시됩니다.'
+                  : '비로그인 상태입니다. 로그인하지 않았으므로 자산, 보유종목, 거래내역은 표시되지 않습니다.',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF374151),
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFilterSection() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Wrap(
@@ -476,7 +485,7 @@ class _StockScreenState extends State<StockScreen> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           SizedBox(
-            width: 260,
+            width: 280,
             child: TextField(
               controller: _searchController,
               onChanged: (_) => setState(() {}),
@@ -499,7 +508,7 @@ class _StockScreenState extends State<StockScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFF6366F1)),
+                  borderSide: const BorderSide(color: Color(0xFF2563EB)),
                 ),
               ),
             ),
@@ -515,7 +524,7 @@ class _StockScreenState extends State<StockScreen> {
           ),
           _buildDropdownBox(
             value: _selectedSort,
-            items: const ['등락률', '현재가', '보유수량', '이름'],
+            items: const ['등락률', '현재가', '이름'],
             onChanged: (value) {
               setState(() {
                 _selectedSort = value!;
@@ -530,13 +539,13 @@ class _StockScreenState extends State<StockScreen> {
                 _showOnlyOwned = value;
               });
             },
-            selectedColor: const Color(0xFFE0E7FF),
+            selectedColor: const Color(0xFFDBEAFE),
             side: const BorderSide(color: Color(0xFFE5E7EB)),
             labelStyle: TextStyle(
               color: _showOnlyOwned
-                  ? const Color(0xFF4338CA)
+                  ? const Color(0xFF1D4ED8)
                   : const Color(0xFF374151),
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -572,7 +581,7 @@ class _StockScreenState extends State<StockScreen> {
           borderRadius: BorderRadius.circular(14),
           style: const TextStyle(
             fontSize: 14,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             color: Color(0xFF111827),
           ),
           icon: const Icon(Icons.keyboard_arrow_down_rounded),
@@ -589,6 +598,13 @@ class _StockScreenState extends State<StockScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,7 +612,7 @@ class _StockScreenState extends State<StockScreen> {
           const Text(
             '종목 목록',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827),
             ),
@@ -605,14 +621,17 @@ class _StockScreenState extends State<StockScreen> {
           if (items.isEmpty)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 50),
+              padding: const EdgeInsets.symmetric(vertical: 60),
               alignment: Alignment.center,
-              child: const Text(
-                '조건에 맞는 종목이 없습니다.',
-                style: TextStyle(
+              child: Text(
+                _isLoggedIn
+                    ? '종목 마스터(stock_item) 연결 전입니다.'
+                    : '비로그인 상태이며, 현재 종목 데이터도 아직 연결되지 않았습니다.',
+                style: const TextStyle(
                   fontSize: 14,
                   color: Color(0xFF6B7280),
                 ),
+                textAlign: TextAlign.center,
               ),
             )
           else
@@ -634,12 +653,12 @@ class _StockScreenState extends State<StockScreen> {
 
   Widget _buildListHeader() {
     return Container(
-      height: 48,
+      height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: const Row(
         children: [
           Expanded(
-            flex: 28,
+            flex: 30,
             child: Text(
               '종목',
               style: TextStyle(
@@ -650,7 +669,7 @@ class _StockScreenState extends State<StockScreen> {
             ),
           ),
           Expanded(
-            flex: 18,
+            flex: 20,
             child: Text(
               '현재가',
               textAlign: TextAlign.right,
@@ -662,7 +681,7 @@ class _StockScreenState extends State<StockScreen> {
             ),
           ),
           Expanded(
-            flex: 18,
+            flex: 16,
             child: Text(
               '등락률',
               textAlign: TextAlign.right,
@@ -674,7 +693,7 @@ class _StockScreenState extends State<StockScreen> {
             ),
           ),
           Expanded(
-            flex: 18,
+            flex: 16,
             child: Text(
               '보유수량',
               textAlign: TextAlign.right,
@@ -703,76 +722,32 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Widget _buildListRow(_StockItem item) {
-    final isSelected = _selectedItem?.code == item.code;
-    final changeColor = _changeColor(item.changeRate);
-    final profitColor = _changeColor(item.profitAmount);
-
     return InkWell(
       onTap: () {
         setState(() {
-          _selectedItem = item;
+          _selectedMarketItem = item;
         });
       },
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFF8FAFC) : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected
-                ? const Color(0xFFCBD5E1)
-                : Colors.transparent,
-          ),
-        ),
         child: Row(
           children: [
             Expanded(
-              flex: 28,
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: item.market == '국내'
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFF6366F1),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${item.code} · ${item.market}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF9CA3AF),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              flex: 30,
+              child: Text(
+                item.name,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF111827),
+                ),
               ),
             ),
             Expanded(
-              flex: 18,
+              flex: 20,
               child: Text(
-                '${_formatPrice(item.currentPrice)}원',
+                '₩ ${_formatPrice(item.currentPrice)}',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
                   fontSize: 14,
@@ -782,38 +757,38 @@ class _StockScreenState extends State<StockScreen> {
               ),
             ),
             Expanded(
-              flex: 18,
+              flex: 16,
               child: Text(
                 _formatSignedPercent(item.changeRate),
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: changeColor,
+                  color: _changeColor(item.changeRate),
                 ),
               ),
             ),
-            Expanded(
-              flex: 18,
+            const Expanded(
+              flex: 16,
               child: Text(
-                '${item.ownedQuantity}주',
+                '0주',
                 textAlign: TextAlign.right,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF111827),
                 ),
               ),
             ),
-            Expanded(
+            const Expanded(
               flex: 18,
               child: Text(
-                '${_formatSignedPrice(item.profitAmount)}원',
+                '0원',
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: profitColor,
+                  color: Color(0xFF6B7280),
                 ),
               ),
             ),
@@ -823,13 +798,12 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _buildDetailSection(_StockItem? item) {
-    if (item == null) {
-      return _buildEmptyCard('선택된 종목이 없습니다.');
+  Widget _buildDetailSection() {
+    if (_selectedMarketItem == null) {
+      return _buildEmptyCard('선택된 종목이 없습니다. 현재는 종목 데이터도 미연결 상태입니다.');
     }
 
-    final changeColor = _changeColor(item.changeRate);
-    final profitColor = _changeColor(item.profitAmount);
+    final item = _selectedMarketItem!;
 
     return Container(
       width: double.infinity,
@@ -838,58 +812,37 @@ class _StockScreenState extends State<StockScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '종목 상세',
+            '선택 종목 상세',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827),
             ),
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  item.name,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: item.market == '국내'
-                      ? const Color(0xFFECFDF5)
-                      : const Color(0xFFEEF2FF),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  item.market,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: item.market == '국내'
-                        ? const Color(0xFF047857)
-                        : const Color(0xFF4338CA),
-                  ),
-                ),
-              ),
-            ],
+          Text(
+            item.name,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF111827),
+            ),
           ),
           const SizedBox(height: 6),
           Text(
-            item.code,
+            '${item.code} · ${item.market}',
             style: const TextStyle(
               fontSize: 13,
               color: Color(0xFF9CA3AF),
@@ -901,7 +854,7 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '현재가',
-                  value: '${_formatPrice(item.currentPrice)}원',
+                  value: '₩ ${_formatPrice(item.currentPrice)}',
                   valueColor: const Color(0xFF111827),
                 ),
               ),
@@ -910,7 +863,7 @@ class _StockScreenState extends State<StockScreen> {
                 child: _buildDetailMetric(
                   title: '등락률',
                   value: _formatSignedPercent(item.changeRate),
-                  valueColor: changeColor,
+                  valueColor: _changeColor(item.changeRate),
                 ),
               ),
             ],
@@ -921,7 +874,27 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '보유수량',
-                  value: '${item.ownedQuantity}주',
+                  value: '0주',
+                  valueColor: const Color(0xFF111827),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildDetailMetric(
+                  title: '평균단가',
+                  value: '-',
+                  valueColor: const Color(0xFF111827),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDetailMetric(
+                  title: '평가금액',
+                  value: '₩ 0',
                   valueColor: const Color(0xFF111827),
                 ),
               ),
@@ -929,8 +902,8 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '평가손익',
-                  value: '${_formatSignedPrice(item.profitAmount)}원',
-                  valueColor: profitColor,
+                  value: '0원',
+                  valueColor: const Color(0xFF6B7280),
                 ),
               ),
             ],
@@ -944,27 +917,15 @@ class _StockScreenState extends State<StockScreen> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '종목 설명',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item.description,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.6,
-                    color: Color(0xFF374151),
-                  ),
-                ),
-              ],
+            child: Text(
+              item.description.isEmpty
+                  ? '종목 설명 데이터가 없습니다.'
+                  : item.description,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.6,
+                color: Color(0xFF374151),
+              ),
             ),
           ),
         ],
@@ -1009,13 +970,7 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _buildTradeSection(_StockItem? item) {
-    if (item == null) {
-      return _buildEmptyCard('매매할 종목을 먼저 선택해주세요.');
-    }
-
-    final quantityController = TextEditingController(text: '1');
-
+  Widget _buildTradeSection() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -1023,6 +978,13 @@ class _StockScreenState extends State<StockScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1030,14 +992,14 @@ class _StockScreenState extends State<StockScreen> {
           const Text(
             '매수 / 매도',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827),
             ),
           ),
           const SizedBox(height: 18),
           TextField(
-            controller: quantityController,
+            controller: _quantityController,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
               labelText: '수량',
@@ -1058,7 +1020,7 @@ class _StockScreenState extends State<StockScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFF6366F1)),
+                borderSide: const BorderSide(color: Color(0xFF2563EB)),
               ),
             ),
           ),
@@ -1071,34 +1033,15 @@ class _StockScreenState extends State<StockScreen> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '주문 기준가: ${_formatPrice(item.currentPrice)}원',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '보유 현금: ${_formatPrice(_cash)}원',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '현재 보유수량: ${item.ownedQuantity}주',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-              ],
+            child: Text(
+              _isLoggedIn
+                  ? '실제 매수/매도는 user_wallet, stock_holding, stock_trade_history 연결 후 활성화됩니다.'
+                  : '비로그인 상태에서는 주문할 수 없습니다.',
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.6,
+                color: Color(0xFF6B7280),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -1108,17 +1051,13 @@ class _StockScreenState extends State<StockScreen> {
                 child: SizedBox(
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('${item.name} 매수 기능은 다음 단계에서 연결합니다.'),
-                        ),
-                      );
-                    },
+                    onPressed: _isLoggedIn ? _handleBuy : null,
                     style: ElevatedButton.styleFrom(
                       elevation: 0,
                       backgroundColor: const Color(0xFF16A34A),
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFFE5E7EB),
+                      disabledForegroundColor: const Color(0xFF9CA3AF),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -1138,17 +1077,13 @@ class _StockScreenState extends State<StockScreen> {
                 child: SizedBox(
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('${item.name} 매도 기능은 다음 단계에서 연결합니다.'),
-                        ),
-                      );
-                    },
+                    onPressed: _isLoggedIn ? _handleSell : null,
                     style: ElevatedButton.styleFrom(
                       elevation: 0,
                       backgroundColor: const Color(0xFFDC2626),
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFFE5E7EB),
+                      disabledForegroundColor: const Color(0xFF9CA3AF),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -1170,6 +1105,182 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  Widget _buildChartPlaceholderSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '차트 영역',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            height: 220,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFFE5E7EB),
+              ),
+            ),
+            child: const Center(
+              child: Text(
+                '차트는 종목 시세 데이터 연결 후 표시됩니다.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTradeHistorySection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '최근 체결내역',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (_tradeHistoryItems.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 36),
+              alignment: Alignment.center,
+              child: Text(
+                _isLoggedIn
+                    ? '거래내역이 없습니다.'
+                    : '비로그인 상태에서는 거래내역이 표시되지 않습니다.',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: _tradeHistoryItems
+                  .map((item) => _buildTradeHistoryRow(item))
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTradeHistoryRow(_TradeHistoryItem item) {
+    final bool isBuy = item.tradeType == '매수';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isBuy
+                  ? const Color(0xFFECFDF5)
+                  : const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              item.tradeType,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isBuy
+                    ? const Color(0xFF047857)
+                    : const Color(0xFFB91C1C),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              item.stockName,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF111827),
+              ),
+            ),
+          ),
+          Text(
+            '${item.quantity}주',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(width: 18),
+          Text(
+            '₩ ${_formatPrice(item.price)}',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(width: 18),
+          SizedBox(
+            width: 110,
+            child: Text(
+              item.dateText,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF9CA3AF),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyCard(String text) {
     return Container(
       width: double.infinity,
@@ -1182,6 +1293,7 @@ class _StockScreenState extends State<StockScreen> {
       child: Center(
         child: Text(
           text,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 14,
             color: Color(0xFF6B7280),
@@ -1198,9 +1310,6 @@ class _StockItem {
   final String market;
   final double currentPrice;
   final double changeRate;
-  final double changeAmount;
-  final int ownedQuantity;
-  final double averagePrice;
   final String description;
 
   _StockItem({
@@ -1209,15 +1318,34 @@ class _StockItem {
     required this.market,
     required this.currentPrice,
     required this.changeRate,
-    required this.changeAmount,
-    required this.ownedQuantity,
-    required this.averagePrice,
     required this.description,
   });
+}
 
-  double get stockValue => currentPrice * ownedQuantity;
+class _HoldingItem {
+  final String code;
+  final int quantity;
+  final double averagePrice;
 
-  double get buyAmount => averagePrice * ownedQuantity;
+  _HoldingItem({
+    required this.code,
+    required this.quantity,
+    required this.averagePrice,
+  });
+}
 
-  double get profitAmount => stockValue - buyAmount;
+class _TradeHistoryItem {
+  final String stockName;
+  final String tradeType;
+  final int quantity;
+  final double price;
+  final String dateText;
+
+  _TradeHistoryItem({
+    required this.stockName,
+    required this.tradeType,
+    required this.quantity,
+    required this.price,
+    required this.dateText,
+  });
 }
