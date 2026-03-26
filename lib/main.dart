@@ -1,30 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'core/supabase/supabase_config.dart';
-import 'feature/home/view/home_screen.dart';
+import 'package:stock/core/supabase/supabase_config.dart';
+import 'package:stock/feature/home/view/home_screen.dart';
 
 Future<void> main() async {
-  // 수정1차: Flutter 엔진 초기화
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 수정1차: Supabase 연결
+  // 수정1차: runApp 이전에 Supabase 먼저 초기화
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
 
-  runApp(const MyApp());
+  runApp(const StockApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class StockApp extends StatelessWidget {
+  const StockApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomeScreen(),
+      title: 'stock',
+      home: const HomeScreen(),
     );
   }
 }

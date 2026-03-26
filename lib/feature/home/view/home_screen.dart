@@ -8,9 +8,9 @@ import 'widget/bottom_notice_section.dart';
 import 'widget/category_grid_section.dart';
 import 'widget/feature_section.dart';
 import 'widget/hero_section.dart';
-import 'widget/login_card_section.dart';
+import '../../auth/view/widget/login_card_section.dart';
 import 'widget/my_asset_card_section.dart';
-import 'widget/register_view_section.dart';
+import '../../auth/view/widget/register_view_section.dart';
 import 'widget/top_header_section.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,6 +26,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 수정5차: 상단 메뉴 기준 메인 컨텐츠 상태
   String _selectedMenu = 'home';
+
+  // 수정6차: 로그인 입력 컨트롤러
+  final TextEditingController _loginIdController = TextEditingController();
+  final TextEditingController _loginPasswordController =
+  TextEditingController();
+
+  // 수정6차: 회원가입 입력 컨트롤러
+  final TextEditingController _registerIdController = TextEditingController();
+  final TextEditingController _registerPasswordController =
+  TextEditingController();
+  final TextEditingController _registerPasswordConfirmController =
+  TextEditingController();
+  final TextEditingController _registerUserNameController =
+  TextEditingController();
+  final TextEditingController _registerPhoneController =
+  TextEditingController();
+  final TextEditingController _registerEmailController =
+  TextEditingController();
+
+  // 수정6차: 로그인/회원가입 공통 상태값
+  bool _isLoading = false;
+  String? _errorMessage;
 
   // 수정3차: Supabase 인증 상태 변경 감지 리스너
   StreamSubscription<AuthState>? _authStateSubscription;
@@ -45,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // 수정3차: 로그인 성공 시 회원가입 화면 닫기
             if (data.session != null) {
               _showRegisterView = false;
+              _errorMessage = null;
             }
           });
         });
@@ -52,6 +75,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    // 수정6차: 컨트롤러 해제
+    _loginIdController.dispose();
+    _loginPasswordController.dispose();
+    _registerIdController.dispose();
+    _registerPasswordController.dispose();
+    _registerPasswordConfirmController.dispose();
+    _registerUserNameController.dispose();
+    _registerPhoneController.dispose();
+    _registerEmailController.dispose();
+
     // 수정3차: 리스너 해제
     _authStateSubscription?.cancel();
     super.dispose();
@@ -61,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openRegisterView() {
     setState(() {
       _showRegisterView = true;
+      _errorMessage = null;
     });
   }
 
@@ -68,14 +102,86 @@ class _HomeScreenState extends State<HomeScreen> {
   void _closeRegisterView() {
     setState(() {
       _showRegisterView = false;
+      _errorMessage = null;
     });
   }
 
-  // 수정2차: 로그인 성공 처리
-  void _handleLoginSuccess() {
+  // 수정6차: 로그인 처리
+  Future<void> _handleLogin() async {
     setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (_loginIdController.text.trim().isEmpty ||
+        _loginPasswordController.text.trim().isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = '아이디와 비밀번호를 입력해주세요.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = false;
+      _errorMessage = null;
+    });
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('로그인 연결은 다음 단계에서 Supabase와 연동합니다.'),
+      ),
+    );
+  }
+
+  // 수정6차: 회원가입 처리
+  Future<void> _handleRegister() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (_registerIdController.text.trim().isEmpty ||
+        _registerPasswordController.text.trim().isEmpty ||
+        _registerPasswordConfirmController.text.trim().isEmpty ||
+        _registerUserNameController.text.trim().isEmpty ||
+        _registerPhoneController.text.trim().isEmpty ||
+        _registerEmailController.text.trim().isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = '회원가입 항목을 모두 입력해주세요.';
+      });
+      return;
+    }
+
+    if (_registerPasswordController.text.trim() !=
+        _registerPasswordConfirmController.text.trim()) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = '비밀번호와 비밀번호 확인이 일치하지 않습니다.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = false;
+      _errorMessage = null;
       _showRegisterView = false;
     });
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('회원가입 연결은 다음 단계에서 Supabase와 연동합니다.'),
+      ),
+    );
   }
 
   // 수정5차: 상단 메뉴 선택 처리
@@ -83,6 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedMenu = menuKey;
       _showRegisterView = false;
+      _errorMessage = null;
     });
   }
 
@@ -106,7 +213,17 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: _showRegisterView
                 ? RegisterViewSection(
-              onCloseRegisterView: _closeRegisterView,
+              idController: _registerIdController,
+              passwordController: _registerPasswordController,
+              passwordConfirmController:
+              _registerPasswordConfirmController,
+              userNameController: _registerUserNameController,
+              phoneController: _registerPhoneController,
+              emailController: _registerEmailController,
+              errorMessage: _errorMessage,
+              isLoading: _isLoading,
+              onSubmit: _handleRegister,
+              onTapLogin: _closeRegisterView,
             )
                 : _buildMainContent(
               session: session,
@@ -187,8 +304,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         flex: 3,
                         child: session == null
                             ? LoginCardSection(
-                          onOpenRegister: _openRegisterView,
-                          onLoginSuccess: _handleLoginSuccess,
+                          idController: _loginIdController,
+                          passwordController: _loginPasswordController,
+                          errorMessage: _errorMessage,
+                          isLoading: _isLoading,
+                          onTapLogin: _handleLogin,
+                          onTapRegister: _openRegisterView,
                         )
                             : MyAssetCardSection(
                           user: user,
@@ -203,8 +324,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 20),
                       session == null
                           ? LoginCardSection(
-                        onOpenRegister: _openRegisterView,
-                        onLoginSuccess: _handleLoginSuccess,
+                        idController: _loginIdController,
+                        passwordController: _loginPasswordController,
+                        errorMessage: _errorMessage,
+                        isLoading: _isLoading,
+                        onTapLogin: _handleLogin,
+                        onTapRegister: _openRegisterView,
                       )
                           : MyAssetCardSection(
                         user: user,
