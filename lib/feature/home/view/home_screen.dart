@@ -64,7 +64,6 @@ class _HomeScreenState extends State<HomeScreen> {
           if (!mounted) return;
 
           setState(() {
-            // 수정3차: 로그인 성공 시 회원가입 화면 닫기
             if (data.session != null) {
               _showRegisterView = false;
               _errorMessage = null;
@@ -75,7 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    // 수정6차: 컨트롤러 해제
     _loginIdController.dispose();
     _loginPasswordController.dispose();
     _registerIdController.dispose();
@@ -85,7 +83,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _registerPhoneController.dispose();
     _registerEmailController.dispose();
 
-    // 수정3차: 리스너 해제
     _authStateSubscription?.cancel();
     super.dispose();
   }
@@ -106,82 +103,252 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 수정6차: 로그인 처리
-  Future<void> _handleLogin() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  // 수정7차: 아이디 사용 가능 여부 체크
+  // true = 사용 가능 / false = 이미 사용중
+  Future<bool> _checkIdDuplicate(String loginId) async {
+    final String trimmedId = loginId.trim();
 
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    if (_loginIdController.text.trim().isEmpty ||
-        _loginPasswordController.text.trim().isEmpty) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = '아이디와 비밀번호를 입력해주세요.';
-      });
-      return;
+    if (trimmedId.isEmpty) {
+      return false;
     }
 
-    setState(() {
-      _isLoading = false;
-      _errorMessage = null;
-    });
+    try {
+      final dynamic result = await _supabase
+          .from('profiles')
+          .select('login_id')
+          .eq('login_id', trimmedId)
+          .maybeSingle();
 
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('로그인 연결은 다음 단계에서 Supabase와 연동합니다.'),
-      ),
-    );
+      return result == null;
+    } catch (_) {
+      return false;
+    }
   }
 
-  // 수정6차: 회원가입 처리
-  Future<void> _handleRegister() async {
+  // 수정8차: 이메일 사용 가능 여부 체크
+  // true = 사용 가능 / false = 이미 사용중
+  Future<bool> _checkEmailDuplicate(String email) async {
+    final String trimmedEmail = email.trim();
+
+    if (trimmedEmail.isEmpty) {
+      return false;
+    }
+
+    try {
+      final dynamic result = await _supabase
+          .from('profiles')
+          .select('email')
+          .eq('email', trimmedEmail)
+          .maybeSingle();
+
+      return result == null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 수정9차: login_id로 email 찾기
+  Future<String?> _findEmailByLoginId(String loginId) async {
+    final String trimmedId = loginId.trim();
+
+    if (trimmedId.isEmpty) {
+      return null;
+    }
+
+    final Map<String, dynamic>? result = await _supabase
+        .from('profiles')
+        .select('email')
+        .eq('login_id', trimmedId)
+        .maybeSingle();
+
+    if (result == null) {
+      return null;
+    }
+
+    return result['email']?.toString();
+  }
+
+  // 수정10차: 로그인 처리 - Supabase 실제 연동
+  Future<void> _handleLogin() async {
+    final String loginId = _loginIdController.text.trim();
+    final String password = _loginPasswordController.text.trim();
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    await Future.delayed(const Duration(milliseconds: 300));
+    try {
+      if (loginId.isEmpty || password.isEmpty) {
+        throw Exception('아이디와 비밀번호를 입력해주세요.');
+      }
 
-    if (_registerIdController.text.trim().isEmpty ||
-        _registerPasswordController.text.trim().isEmpty ||
-        _registerPasswordConfirmController.text.trim().isEmpty ||
-        _registerUserNameController.text.trim().isEmpty ||
-        _registerPhoneController.text.trim().isEmpty ||
-        _registerEmailController.text.trim().isEmpty) {
+      final String? email = await _findEmailByLoginId(loginId);
+
+      if (email == null || email.isEmpty) {
+        throw Exception('존재하지 않는 아이디입니다.');
+      }
+
+      await _supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('로그인되었습니다.')),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.message;
+      });
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage =
+        e.message.isNotEmpty ? e.message : '로그인 중 오류가 발생했습니다.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (!mounted) return;
+
       setState(() {
         _isLoading = false;
-        _errorMessage = '회원가입 항목을 모두 입력해주세요.';
       });
-      return;
     }
+  }
 
-    if (_registerPasswordController.text.trim() !=
-        _registerPasswordConfirmController.text.trim()) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = '비밀번호와 비밀번호 확인이 일치하지 않습니다.';
-      });
-      return;
-    }
+  // 수정11차: 회원가입 처리 - Supabase 실제 연동
+  Future<void> _handleRegister() async {
+    final String loginId = _registerIdController.text.trim();
+    final String password = _registerPasswordController.text.trim();
+    final String passwordConfirm =
+    _registerPasswordConfirmController.text.trim();
+    final String userName = _registerUserNameController.text.trim();
+    final String phone = _registerPhoneController.text.trim();
+    final String email = _registerEmailController.text.trim();
 
     setState(() {
-      _isLoading = false;
+      _isLoading = true;
       _errorMessage = null;
-      _showRegisterView = false;
     });
 
-    if (!mounted) return;
+    try {
+      if (loginId.isEmpty ||
+          password.isEmpty ||
+          passwordConfirm.isEmpty ||
+          userName.isEmpty ||
+          phone.isEmpty ||
+          email.isEmpty) {
+        throw Exception('회원가입 항목을 모두 입력해주세요.');
+      }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('회원가입 연결은 다음 단계에서 Supabase와 연동합니다.'),
-      ),
-    );
+      if (password != passwordConfirm) {
+        throw Exception('비밀번호와 비밀번호 확인이 일치하지 않습니다.');
+      }
+
+      final bool isIdAvailable = await _checkIdDuplicate(loginId);
+      if (!isIdAvailable) {
+        throw Exception('이미 사용 중인 ID입니다.');
+      }
+
+      final bool isEmailAvailable = await _checkEmailDuplicate(email);
+      if (!isEmailAvailable) {
+        throw Exception('이미 사용 중인 이메일입니다.');
+      }
+
+      final AuthResponse authResponse = await _supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'login_id': loginId,
+          'user_name': userName,
+          'phone': phone,
+        },
+      );
+
+      final User? createdUser = authResponse.user;
+
+      if (createdUser == null) {
+        throw Exception('회원가입은 완료되었지만 사용자 정보를 가져오지 못했습니다.');
+      }
+
+      await _supabase.from('profiles').upsert({
+        'id': createdUser.id,
+        'login_id': loginId,
+        'user_name': userName,
+        'phone': phone,
+        'email': email,
+        'role': 'user',
+        'agree_terms': true,
+        'agree_privacy': true,
+        'agree_marketing': false,
+      });
+
+      if (!mounted) return;
+
+      _registerIdController.clear();
+      _registerPasswordController.clear();
+      _registerPasswordConfirmController.clear();
+      _registerUserNameController.clear();
+      _registerPhoneController.clear();
+      _registerEmailController.clear();
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = null;
+        _showRegisterView = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('회원가입이 완료되었습니다. 로그인해 주세요.')),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.message;
+      });
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+
+      String message = '회원가입 중 오류가 발생했습니다.';
+
+      if (e.message.contains('duplicate key') &&
+          e.message.contains('login_id')) {
+        message = '이미 사용 중인 ID입니다.';
+      } else if (e.message.contains('duplicate key') &&
+          e.message.contains('email')) {
+        message = '이미 사용 중인 이메일입니다.';
+      } else if (e.message.isNotEmpty) {
+        message = e.message;
+      }
+
+      setState(() {
+        _errorMessage = message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   // 수정5차: 상단 메뉴 선택 처리
@@ -224,6 +391,8 @@ class _HomeScreenState extends State<HomeScreen> {
               isLoading: _isLoading,
               onSubmit: _handleRegister,
               onTapLogin: _closeRegisterView,
+              onCheckId: _checkIdDuplicate,
+              onCheckEmail: _checkEmailDuplicate,
             )
                 : _buildMainContent(
               session: session,

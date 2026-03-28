@@ -23,7 +23,7 @@ class StockApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'stock',
-      home: const HomeScreen(),
+      home: HomeScreen(),
     );
   }
 }
