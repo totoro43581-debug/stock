@@ -21,18 +21,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // 수정1차: HomeScreen에는 화면 전환 상태만 유지
   bool _showRegisterView = false;
-
-  // 수정5차: 상단 메뉴 기준 메인 컨텐츠 상태
   String _selectedMenu = 'home';
 
-  // 수정6차: 로그인 입력 컨트롤러
   final TextEditingController _loginIdController = TextEditingController();
   final TextEditingController _loginPasswordController =
   TextEditingController();
 
-  // 수정6차: 회원가입 입력 컨트롤러
   final TextEditingController _registerIdController = TextEditingController();
   final TextEditingController _registerPasswordController =
   TextEditingController();
@@ -45,11 +40,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _registerEmailController =
   TextEditingController();
 
-  // 수정6차: 로그인/회원가입 공통 상태값
   bool _isLoading = false;
   String? _errorMessage;
 
-  // 수정3차: Supabase 인증 상태 변경 감지 리스너
   StreamSubscription<AuthState>? _authStateSubscription;
 
   SupabaseClient get _supabase => Supabase.instance.client;
@@ -58,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // 수정3차: 로그인/로그아웃 발생 시 HomeScreen 강제 갱신
     _authStateSubscription =
         _supabase.auth.onAuthStateChange.listen((AuthState data) {
           if (!mounted) return;
@@ -87,7 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // 수정2차: 회원가입 화면 열기
   void _openRegisterView() {
     setState(() {
       _showRegisterView = true;
@@ -95,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 수정2차: 회원가입 화면 닫기
   void _closeRegisterView() {
     setState(() {
       _showRegisterView = false;
@@ -103,8 +93,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 수정7차: 아이디 사용 가능 여부 체크
-  // true = 사용 가능 / false = 이미 사용중
   Future<bool> _checkIdDuplicate(String loginId) async {
     final String trimmedId = loginId.trim();
 
@@ -125,8 +113,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 수정8차: 이메일 사용 가능 여부 체크
-  // true = 사용 가능 / false = 이미 사용중
   Future<bool> _checkEmailDuplicate(String email) async {
     final String trimmedEmail = email.trim();
 
@@ -147,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 수정9차: login_id로 email 찾기
   Future<String?> _findEmailByLoginId(String loginId) async {
     final String trimmedId = loginId.trim();
 
@@ -168,7 +153,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return result['email']?.toString();
   }
 
-  // 수정10차: 로그인 처리 - Supabase 실제 연동
   Future<void> _handleLogin() async {
     final String loginId = _loginIdController.text.trim();
     final String password = _loginPasswordController.text.trim();
@@ -227,7 +211,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 수정11차: 회원가입 처리 - Supabase 실제 연동
   Future<void> _handleRegister() async {
     final String loginId = _registerIdController.text.trim();
     final String password = _registerPasswordController.text.trim();
@@ -351,7 +334,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 수정5차: 상단 메뉴 선택 처리
   void _handleMenuSelected(String menuKey) {
     setState(() {
       _selectedMenu = menuKey;
@@ -405,7 +387,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 수정5차: 상단 메뉴 기준 메인 컨텐츠 분기
   Widget _buildMainContent({
     required Session? session,
     required User? user,
@@ -440,7 +421,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 수정4차: 기존 홈 메인 컨텐츠
   Widget _buildHomeContent({
     required Session? session,
     required User? user,
@@ -459,32 +439,35 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isWide)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 7,
-                        child: HeroSection(
-                          user: user,
+                  SizedBox(
+                    height: 342,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 7,
+                          child: HeroSection(
+                            user: user,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        flex: 3,
-                        child: session == null
-                            ? LoginCardSection(
-                          idController: _loginIdController,
-                          passwordController: _loginPasswordController,
-                          errorMessage: _errorMessage,
-                          isLoading: _isLoading,
-                          onTapLogin: _handleLogin,
-                          onTapRegister: _openRegisterView,
-                        )
-                            : MyAssetCardSection(
-                          user: user,
+                        const SizedBox(width: 24),
+                        Expanded(
+                          flex: 3,
+                          child: session == null
+                              ? LoginCardSection(
+                            idController: _loginIdController,
+                            passwordController: _loginPasswordController,
+                            errorMessage: _errorMessage,
+                            isLoading: _isLoading,
+                            onTapLogin: _handleLogin,
+                            onTapRegister: _openRegisterView,
+                          )
+                              : MyAssetCardSection(
+                            user: user,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   )
                 else
                   Column(
@@ -526,7 +509,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 수정5차: 준비중 화면
   Widget _buildPreparingContent(String title) {
     return Container(
       width: double.infinity,

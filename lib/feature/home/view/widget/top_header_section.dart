@@ -19,6 +19,13 @@ class TopHeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 수정2차: 현재 로그인 사용자 정보 읽기
+    final User? user = Supabase.instance.client.auth.currentUser;
+
+    // 수정2차: userMetadata 기반 사용자명 표시
+    final String displayName =
+        user?.userMetadata?['user_name']?.toString() ?? '사용자';
+
     return Container(
       height: 76,
       decoration: const BoxDecoration(
@@ -132,7 +139,7 @@ class TopHeaderSection extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                session == null ? '비로그인' : '로그인됨',
+                session == null ? '비로그인' : '$displayName님',
                 style: TextStyle(
                   color: session == null
                       ? const Color(0xFF4B5563)

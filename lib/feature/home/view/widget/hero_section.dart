@@ -13,7 +13,6 @@ class HeroSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 수정1차: 최초 렌더링 overflow 방지를 위해 폭에 따라 간격/폰트 축소
         final bool isCompactWide = constraints.maxWidth < 1180;
 
         final double outerPadding = isCompactWide ? 24 : 32;
@@ -86,9 +85,7 @@ class HeroSection extends StatelessWidget {
                     ),
                     SizedBox(height: bodyGap),
                     Text(
-                      user == null
-                          ? '가상의 자산으로 다양한 경제 활동을 체험하고,\n자산 배분과 수익률 변화를 직접 비교해볼 수 있습니다.'
-                          : '${user?.email ?? ''} 님, 현재 로그인된 상태입니다.\n다음 단계에서 내 자산 대시보드와 실제 상품별 기능을 연결합니다.',
+                      '가상의 자산으로 다양한 경제 활동을 체험하고,\n자산 배분과 수익률 변화를 직접 비교해볼 수 있습니다.',
                       style: TextStyle(
                         color: const Color(0xFFD1D5DB),
                         fontSize: bodyFontSize,
