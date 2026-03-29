@@ -50,7 +50,7 @@ class _MyAssetCardSectionState extends State<MyAssetCardSection> {
         widget.user?.userMetadata?['user_name']?.toString() ?? '사용자';
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -64,6 +64,7 @@ class _MyAssetCardSectionState extends State<MyAssetCardSection> {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
@@ -74,27 +75,28 @@ class _MyAssetCardSectionState extends State<MyAssetCardSection> {
               color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   '$displayName님',
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF111827),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   email,
                   style: const TextStyle(
@@ -106,11 +108,11 @@ class _MyAssetCardSectionState extends State<MyAssetCardSection> {
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: const Color(0xFFEEF4FF),
               borderRadius: BorderRadius.circular(18),
@@ -118,6 +120,7 @@ class _MyAssetCardSectionState extends State<MyAssetCardSection> {
             ),
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   '가상 보유 자산',
@@ -126,11 +129,11 @@ class _MyAssetCardSectionState extends State<MyAssetCardSection> {
                     color: Color(0xFF6B7280),
                   ),
                 ),
-                SizedBox(height: 6),
+                SizedBox(height: 4),
                 Text(
                   '₩ 100,000,000',
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 24,
                     fontWeight: FontWeight.w900,
                     color: Color(0xFF1D4ED8),
                   ),
@@ -139,25 +142,26 @@ class _MyAssetCardSectionState extends State<MyAssetCardSection> {
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
 
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: 42,
             child: OutlinedButton(
               onPressed: _isSigningOut ? null : _signOut,
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF111827),
                 side: const BorderSide(color: Color(0xFFD1D5DB)),
+                padding: EdgeInsets.zero,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
               child: _isSigningOut
                   ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2.2),
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2.0),
               )
                   : const Text(
                 '로그아웃',

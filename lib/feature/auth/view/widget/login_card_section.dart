@@ -25,7 +25,7 @@ class LoginCardSection extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(32, 34, 32, 32),
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(28),
@@ -39,124 +39,130 @@ class LoginCardSection extends StatelessWidget {
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.max,
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             '로그인',
             style: TextStyle(
-              fontSize: 28,
+              fontSize: 24,
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
           const Text(
             '아이디와 비밀번호를 입력해주세요.',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               color: Color(0xFF6B7280),
-              height: 1.5,
+              height: 1.4,
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 14),
           const Text(
             '아이디',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w700,
               color: Color(0xFF374151),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           _LoginInputField(
             controller: idController,
             hintText: '아이디를 입력해주세요',
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           const Text(
             '비밀번호',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w700,
               color: Color(0xFF374151),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           _LoginInputField(
             controller: passwordController,
             hintText: '비밀번호를 입력해주세요',
             obscureText: true,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           SizedBox(
-            height: 20,
+            height: 18,
             child: hasError
                 ? Text(
               errorMessage!,
               style: const TextStyle(
                 color: Color(0xFFE11D48),
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             )
                 : const SizedBox.shrink(),
           ),
-          const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton(
-              onPressed: isLoading ? null : onTapLogin,
-              style: ElevatedButton.styleFrom(
-                elevation: 0,
-                backgroundColor: const Color(0xFF0F172A),
-                disabledBackgroundColor: const Color(0xFFE5E7EB),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : onTapLogin,
+                    style: ElevatedButton.styleFrom(
+                      elevation: 0,
+                      backgroundColor: const Color(0xFF0F172A),
+                      disabledBackgroundColor: const Color(0xFFE5E7EB),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: isLoading
+                        ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    )
+                        : const Text(
+                      '로그인',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              child: isLoading
-                  ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  color: Colors.white,
-                ),
-              )
-                  : const Text(
-                '로그인',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: OutlinedButton(
-              onPressed: isLoading ? null : onTapRegister,
-              style: OutlinedButton.styleFrom(
-                backgroundColor: Colors.white,
-                side: const BorderSide(color: Color(0xFFD1D5DB)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: isLoading ? null : onTapRegister,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      side: const BorderSide(color: Color(0xFFD1D5DB)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      '회원가입',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF6D56C1),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              child: const Text(
-                '회원가입',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF6D56C1),
-                ),
-              ),
-            ),
+            ],
           ),
         ],
       ),
@@ -178,7 +184,7 @@ class _LoginInputField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
+      height: 44,
       child: TextField(
         controller: controller,
         obscureText: obscureText,
@@ -186,13 +192,13 @@ class _LoginInputField extends StatelessWidget {
           hintText: hintText,
           hintStyle: const TextStyle(
             color: Color(0xFF9CA3AF),
-            fontSize: 15,
+            fontSize: 14,
           ),
           filled: true,
           fillColor: Colors.white,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+            horizontal: 14,
+            vertical: 12,
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
