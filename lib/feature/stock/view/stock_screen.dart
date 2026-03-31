@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/stock/repository/stock_repository.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -22,8 +23,11 @@ class _StockScreenState extends State<StockScreen> {
   String _selectedSort = '등락률';
   bool _showOnlyOwned = false;
 
-  // 수정2차: 실제 보유 데이터는 아직 미연결이므로 비어있는 상태로 시작
-  final List<_StockItem> _marketItems = [];
+  // 수정5차: stock repository 연결
+  final StockRepository _stockRepository = StockRepository();
+
+  // 수정5차: 실제 stock_item 데이터 바인딩용
+  List<_StockItem> _marketItems = [];
   final List<_HoldingItem> _holdingItems = [];
   final List<_TradeHistoryItem> _tradeHistoryItems = [];
 
@@ -42,11 +46,65 @@ class _StockScreenState extends State<StockScreen> {
   static const double _cardRadius = 20;
   static const double _cardPadding = 20;
 
+  // 수정5차: 최초 진입 시 stock_item 로드
+  @override
+  void initState() {
+    super.initState();
+    _loadMarketItems();
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
     _quantityController.dispose();
     super.dispose();
+  }
+
+  // 수정5차: stock_item 실제 데이터 조회
+  Future<void> _loadMarketItems() async {
+    try {
+      final rows = await _stockRepository.fetchActiveStocks();
+
+      final items = rows.map((row) {
+        return _StockItem(
+          code: (row['code'] ?? '').toString(),
+          name: (row['name'] ?? '').toString(),
+          market: _mapMarketLabel((row['market'] ?? '').toString()),
+          currentPrice: ((row['current_price'] ?? 0) as num).toDouble(),
+          changeRate: ((row['change_rate'] ?? 0) as num).toDouble(),
+          description: (row['market'] ?? '').toString().isEmpty
+              ? ''
+              : '${(row['market'] ?? '').toString()} 종목',
+        );
+      }).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _marketItems = items;
+        if (_selectedMarketItem == null && items.isNotEmpty) {
+          _selectedMarketItem = items.first;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('종목 데이터를 불러오지 못했습니다: $e');
+    }
+  }
+
+  // 수정5차: DB market 값을 기존 화면 필터 구조에 맞게 변환
+  String _mapMarketLabel(String market) {
+    switch (market.toUpperCase()) {
+      case 'KOSPI':
+      case 'KOSDAQ':
+        return '국내';
+      case 'NASDAQ':
+      case 'NYSE':
+      case 'AMEX':
+        return '해외';
+      default:
+        return market;
+    }
   }
 
   // 수정2차: 실제 자산 데이터 미연결 상태이므로 0으로 계산
@@ -188,7 +246,7 @@ class _StockScreenState extends State<StockScreen> {
     return Container(
       width: double.infinity,
       height: double.infinity,
-      color: const Color(0xFFF3F5F9),
+      color: Colors.white, // 수정6차: 전체 배경 화이트
       child: LayoutBuilder(
         builder: (context, constraints) {
           final bool isWide = constraints.maxWidth >= 1280;
@@ -365,7 +423,7 @@ class _StockScreenState extends State<StockScreen> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF0F172A)
-                        : const Color(0xFFF9FAFB),
+                        : Colors.white, // 수정6차: 화이트
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected
@@ -568,7 +626,7 @@ class _StockScreenState extends State<StockScreen> {
                 hintText: '종목명 / 종목코드 검색',
                 prefixIcon: const Icon(Icons.search_rounded),
                 filled: true,
-                fillColor: const Color(0xFFF9FAFB),
+                fillColor: Colors.white, // 수정6차: 화이트
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 14,
@@ -615,6 +673,7 @@ class _StockScreenState extends State<StockScreen> {
               });
             },
             selectedColor: const Color(0xFFDBEAFE),
+            backgroundColor: Colors.white, // 수정6차: 화이트
             side: const BorderSide(color: Color(0xFFE5E7EB)),
             labelStyle: TextStyle(
               color: _showOnlyOwned
@@ -638,7 +697,7 @@ class _StockScreenState extends State<StockScreen> {
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: Colors.white, // 수정6차: 화이트
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
@@ -691,8 +750,8 @@ class _StockScreenState extends State<StockScreen> {
               alignment: Alignment.center,
               child: Text(
                 _isLoggedIn
-                    ? '종목 마스터(stock_item) 연결 전입니다.'
-                    : '비로그인 상태이며, 현재 종목 데이터도 아직 연결되지 않았습니다.',
+                    ? '조건에 맞는 종목이 없습니다.'
+                    : '종목 데이터가 없거나 필터 조건에 맞는 결과가 없습니다.',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Color(0xFF6B7280),
@@ -873,7 +932,7 @@ class _StockScreenState extends State<StockScreen> {
         decoration: _cardDecoration(),
         child: const Center(
           child: Text(
-            '선택된 종목이 없습니다. 현재는 종목 데이터도 미연결 상태입니다.',
+            '선택된 종목이 없습니다.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -983,7 +1042,7 @@ class _StockScreenState extends State<StockScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
+              color: Colors.white, // 수정6차: 화이트
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
@@ -1009,7 +1068,7 @@ class _StockScreenState extends State<StockScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: Colors.white, // 수정6차: 화이트
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
@@ -1062,7 +1121,7 @@ class _StockScreenState extends State<StockScreen> {
               labelText: '수량',
               hintText: '주문 수량 입력',
               filled: true,
-              fillColor: const Color(0xFFF9FAFB),
+              fillColor: Colors.white, // 수정6차: 화이트
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 14,
@@ -1086,7 +1145,7 @@ class _StockScreenState extends State<StockScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
+              color: Colors.white, // 수정6차: 화이트
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
@@ -1183,7 +1242,7 @@ class _StockScreenState extends State<StockScreen> {
             width: double.infinity,
             height: 220,
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: Colors.white, // 수정6차: 화이트
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: const Color(0xFFE5E7EB),
