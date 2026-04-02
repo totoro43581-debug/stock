@@ -46,7 +46,9 @@ class _StockScreenState extends State<StockScreen> {
   static const double _cardRadius = 20;
   static const double _cardPadding = 20;
 
-  // 수정5차: 최초 진입 시 stock_item 로드
+  // 수정7차: 안전한 UI 정렬 기준값
+  static const double _summaryCardMinHeight = 150;
+
   @override
   void initState() {
     super.initState();
@@ -117,7 +119,6 @@ class _StockScreenState extends State<StockScreen> {
   List<_StockItem> get _filteredItems {
     List<_StockItem> result = List.of(_marketItems);
 
-    // 수정3차: 상단 카테고리 탭 필터
     if (_selectedCategoryTab == '국내주식') {
       result = result.where((item) => item.market == '국내').toList();
     } else if (_selectedCategoryTab == '해외주식') {
@@ -246,7 +247,7 @@ class _StockScreenState extends State<StockScreen> {
     return Container(
       width: double.infinity,
       height: double.infinity,
-      color: Colors.white, // 수정6차: 전체 배경 화이트
+      color: Colors.white,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final bool isWide = constraints.maxWidth >= 1280;
@@ -275,7 +276,7 @@ class _StockScreenState extends State<StockScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            flex: 7,
+                            flex: 8,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -423,7 +424,7 @@ class _StockScreenState extends State<StockScreen> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF0F172A)
-                        : Colors.white, // 수정6차: 화이트
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected
@@ -485,7 +486,6 @@ class _StockScreenState extends State<StockScreen> {
 
         if (isWide) {
           return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (int i = 0; i < cards.length; i++) ...[
                 Expanded(child: cards[i]),
@@ -500,7 +500,6 @@ class _StockScreenState extends State<StockScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: cards[0]),
                   const SizedBox(width: 16),
@@ -509,7 +508,6 @@ class _StockScreenState extends State<StockScreen> {
               ),
               const SizedBox(height: 16),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: cards[2]),
                   const SizedBox(width: 16),
@@ -540,6 +538,7 @@ class _StockScreenState extends State<StockScreen> {
     required Color valueColor,
   }) {
     return Container(
+      constraints: const BoxConstraints(minHeight: _summaryCardMinHeight),
       padding: const EdgeInsets.all(_cardPadding),
       decoration: _cardDecoration(),
       child: Column(
@@ -556,6 +555,8 @@ class _StockScreenState extends State<StockScreen> {
           const SizedBox(height: 12),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w800,
@@ -565,6 +566,8 @@ class _StockScreenState extends State<StockScreen> {
           const SizedBox(height: 10),
           Text(
             subValue,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 13,
               color: Color(0xFF9CA3AF),
@@ -626,7 +629,7 @@ class _StockScreenState extends State<StockScreen> {
                 hintText: '종목명 / 종목코드 검색',
                 prefixIcon: const Icon(Icons.search_rounded),
                 filled: true,
-                fillColor: Colors.white, // 수정6차: 화이트
+                fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 14,
@@ -673,7 +676,7 @@ class _StockScreenState extends State<StockScreen> {
               });
             },
             selectedColor: const Color(0xFFDBEAFE),
-            backgroundColor: Colors.white, // 수정6차: 화이트
+            backgroundColor: Colors.white,
             side: const BorderSide(color: Color(0xFFE5E7EB)),
             labelStyle: TextStyle(
               color: _showOnlyOwned
@@ -697,7 +700,7 @@ class _StockScreenState extends State<StockScreen> {
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: Colors.white, // 수정6차: 화이트
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
@@ -847,6 +850,8 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Widget _buildListRow(_StockItem item) {
+    final bool isSelected = _selectedMarketItem?.code == item.code;
+
     return InkWell(
       onTap: () {
         setState(() {
@@ -856,12 +861,18 @@ class _StockScreenState extends State<StockScreen> {
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFF8FAFC) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Row(
           children: [
             Expanded(
               flex: 30,
               child: Text(
                 item.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -874,6 +885,8 @@ class _StockScreenState extends State<StockScreen> {
               child: Text(
                 '₩ ${_formatPrice(item.currentPrice)}',
                 textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -886,6 +899,8 @@ class _StockScreenState extends State<StockScreen> {
               child: Text(
                 _formatSignedPercent(item.changeRate),
                 textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -898,6 +913,8 @@ class _StockScreenState extends State<StockScreen> {
               child: Text(
                 '0주',
                 textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -910,6 +927,8 @@ class _StockScreenState extends State<StockScreen> {
               child: Text(
                 '0원',
                 textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -1042,7 +1061,7 @@ class _StockScreenState extends State<StockScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white, // 수정6차: 화이트
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
@@ -1068,7 +1087,7 @@ class _StockScreenState extends State<StockScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white, // 수정6차: 화이트
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
@@ -1086,6 +1105,8 @@ class _StockScreenState extends State<StockScreen> {
           const SizedBox(height: 8),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
@@ -1121,7 +1142,7 @@ class _StockScreenState extends State<StockScreen> {
               labelText: '수량',
               hintText: '주문 수량 입력',
               filled: true,
-              fillColor: Colors.white, // 수정6차: 화이트
+              fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 14,
@@ -1145,7 +1166,7 @@ class _StockScreenState extends State<StockScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white, // 수정6차: 화이트
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
@@ -1242,7 +1263,7 @@ class _StockScreenState extends State<StockScreen> {
             width: double.infinity,
             height: 220,
             decoration: BoxDecoration(
-              color: Colors.white, // 수정6차: 화이트
+              color: Colors.white,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: const Color(0xFFE5E7EB),
@@ -1336,6 +1357,8 @@ class _StockScreenState extends State<StockScreen> {
           Expanded(
             child: Text(
               item.stockName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -1364,6 +1387,8 @@ class _StockScreenState extends State<StockScreen> {
             child: Text(
               item.dateText,
               textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 12,
                 color: Color(0xFF9CA3AF),

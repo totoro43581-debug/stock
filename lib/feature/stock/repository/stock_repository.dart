@@ -13,4 +13,26 @@ class StockRepository {
 
     return List<Map<String, dynamic>>.from(response);
   }
+
+  // 수정1차: 사용자 지갑 조회
+  Future<double> fetchUserWallet() async {
+    final user = _client.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('로그인 필요');
+    }
+
+    final response = await _client
+        .from('user_wallet')
+        .select('cash_balance')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    if (response == null) {
+      return 0;
+    }
+
+    return (response['cash_balance'] as num).toDouble();
+  }
 }
+
