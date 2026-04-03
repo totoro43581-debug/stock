@@ -141,8 +141,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
       String message = e.message;
 
-      // 수정3차: 로그인 에러 한글 변환
-      if (message == 'Invalid login credentials') {
+      // 수정4차: contains로 변경 (핵심)
+      if (e.message.toLowerCase().contains('Invalid login credentials')) {
         message = '아이디 또는 비밀번호가 다릅니다.';
       }
 
