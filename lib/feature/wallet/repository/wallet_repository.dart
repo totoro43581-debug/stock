@@ -6,10 +6,8 @@ class WalletRepository {
 
   final SupabaseClient _client = Supabase.instance.client;
 
-  // 수정1차: 최초 지급 금액
   static const int initialCashBalance = 10000000;
 
-  // 수정1차: 지갑 1건 조회
   Future<WalletModel?> fetchWallet(String userId) async {
     final response = await _client
         .from('wallets')
@@ -24,7 +22,6 @@ class WalletRepository {
     return WalletModel.fromMap(response);
   }
 
-  // 수정1차: 지갑 없으면 생성
   Future<void> createWalletIfNotExists(String userId) async {
     final existingWallet = await fetchWallet(userId);
 
@@ -38,7 +35,6 @@ class WalletRepository {
     });
   }
 
-  // 수정1차: 로그인 직후 안전 보장용
   Future<WalletModel> ensureWallet(String userId) async {
     await createWalletIfNotExists(userId);
 
@@ -51,7 +47,6 @@ class WalletRepository {
     return wallet;
   }
 
-  // 수정1차: 보유 현금 갱신
   Future<void> updateCashBalance({
     required String userId,
     required int cashBalance,

@@ -87,6 +87,8 @@ class LoginCardSection extends StatelessWidget {
             controller: passwordController,
             hintText: '비밀번호를 입력해주세요',
             obscureText: true,
+
+            onSubmitted: onTapLogin,
           ),
           const SizedBox(height: 10),
           SizedBox(
@@ -175,10 +177,14 @@ class _LoginInputField extends StatelessWidget {
   final String hintText;
   final bool obscureText;
 
+  // 수정1차: Enter 이벤트 추가
+  final VoidCallback? onSubmitted;
+
   const _LoginInputField({
     required this.controller,
     required this.hintText,
     this.obscureText = false,
+    this.onSubmitted,
   });
 
   @override
@@ -188,6 +194,18 @@ class _LoginInputField extends StatelessWidget {
       child: TextField(
         controller: controller,
         obscureText: obscureText,
+
+        // 수정1차: 키보드 액션
+        textInputAction:
+        obscureText ? TextInputAction.done : TextInputAction.next,
+
+        // 수정1차: Enter 처리
+        onSubmitted: (_) {
+          if (onSubmitted != null) {
+            onSubmitted!();
+          }
+        },
+
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: const TextStyle(

@@ -138,8 +138,16 @@ class _AuthScreenState extends State<AuthScreen> {
       );
     } on AuthException catch (e) {
       if (!mounted) return;
+
+      String message = e.message;
+
+      // 수정3차: 로그인 에러 한글 변환
+      if (message == 'Invalid login credentials') {
+        message = '아이디 또는 비밀번호가 다릅니다.';
+      }
+
       setState(() {
-        _errorMessage = e.message;
+        _errorMessage = message;
       });
     } catch (e) {
       if (!mounted) return;

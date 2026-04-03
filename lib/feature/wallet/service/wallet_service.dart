@@ -9,7 +9,6 @@ class WalletService {
 
   final WalletRepository _repository;
 
-  // 수정1차: 현재 로그인 사용자 지갑 보장
   Future<WalletModel> ensureMyWallet() async {
     final user = Supabase.instance.client.auth.currentUser;
 
@@ -20,7 +19,6 @@ class WalletService {
     return _repository.ensureWallet(user.id);
   }
 
-  // 수정1차: 현재 로그인 사용자 지갑 조회
   Future<WalletModel?> fetchMyWallet() async {
     final user = Supabase.instance.client.auth.currentUser;
 
