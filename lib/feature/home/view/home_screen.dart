@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/stock/view/stock_screen.dart';
+import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 
 import 'widget/bottom_notice_section.dart';
 import 'widget/category_grid_section.dart';
@@ -12,6 +13,8 @@ import '../../auth/view/widget/login_card_section.dart';
 import 'widget/my_asset_card_section.dart';
 import '../../auth/view/widget/register_view_section.dart';
 import 'widget/top_header_section.dart';
+
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -173,10 +176,19 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('존재하지 않는 아이디입니다.');
       }
 
-      await _supabase.auth.signInWithPassword(
+      final AuthResponse authResponse = await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
+
+      final User? user = authResponse.user;
+
+      if (user == null) {
+        throw Exception('로그인 사용자 정보를 가져오지 못했습니다.');
+      }
+
+// 수정8차: 로그인 직후 wallet 자동 생성 보장
+      await WalletRepository().ensureWallet(user.id);
 
       if (!mounted) return;
 
@@ -186,8 +198,18 @@ class _HomeScreenState extends State<HomeScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
 
+      String message = '로그인 중 오류가 발생했습니다.';
+
+      if (e.message.contains('Invalid login credentials')) {
+        message = '비밀번호가 다릅니다.';
+      } else if (e.message.contains('Email not confirmed')) {
+        message = '이메일 인증이 완료되지 않았습니다.';
+      } else if (e.message.isNotEmpty) {
+        message = e.message;
+      }
+
       setState(() {
-        _errorMessage = e.message;
+        _errorMessage = message;
       });
     } on PostgrestException catch (e) {
       if (!mounted) return;

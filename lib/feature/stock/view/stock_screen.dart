@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
+import 'package:stock/feature/wallet/model/wallet_model.dart';
+import 'package:stock/feature/wallet/repository/wallet_repository.dart';
+
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -25,6 +28,9 @@ class _StockScreenState extends State<StockScreen> {
 
   // 수정5차: stock repository 연결
   final StockRepository _stockRepository = StockRepository();
+
+  WalletModel? _wallet;
+  bool _isWalletLoading = false;
 
   // 수정5차: 실제 stock_item 데이터 바인딩용
   List<_StockItem> _marketItems = [];
@@ -53,6 +59,7 @@ class _StockScreenState extends State<StockScreen> {
   void initState() {
     super.initState();
     _loadMarketItems();
+    _loadWallet();
   }
 
   @override
@@ -94,6 +101,40 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  // 수정8차: 로그인 사용자 wallet 조회/자동생성
+  Future<void> _loadWallet() async {
+    if (!_isLoggedIn || _user == null) {
+      if (!mounted) return;
+      setState(() {
+        _wallet = null;
+        _isWalletLoading = false;
+      });
+      return;
+    }
+
+    try {
+      if (!mounted) return;
+      setState(() {
+        _isWalletLoading = true;
+      });
+
+      final wallet = await WalletRepository().ensureWallet(_user!.id);
+
+      if (!mounted) return;
+      setState(() {
+        _wallet = wallet;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('지갑 정보를 불러오지 못했습니다: $e');
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isWalletLoading = false;
+      });
+    }
+  }
+
   // 수정5차: DB market 값을 기존 화면 필터 구조에 맞게 변환
   String _mapMarketLabel(String market) {
     switch (market.toUpperCase()) {
@@ -109,10 +150,10 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-  // 수정2차: 실제 자산 데이터 미연결 상태이므로 0으로 계산
-  double get _cash => 0;
+// 수정8차: wallet 현금 기준 자산 계산
+  double get _cash => (_wallet?.cashBalance ?? 0).toDouble();
   double get _totalStockValue => 0;
-  double get _totalAsset => 0;
+  double get _totalAsset => _cash + _totalStockValue;
   double get _totalProfitAmount => 0;
   double get _totalProfitRate => 0;
 
@@ -462,7 +503,11 @@ class _StockScreenState extends State<StockScreen> {
       _buildSummaryCard(
         title: '보유 현금',
         value: '₩ ${_formatPrice(_cash)}',
-        subValue: _isLoggedIn ? '지갑 데이터 연결 전' : '비로그인 상태',
+        subValue: !_isLoggedIn
+            ? '비로그인 상태'
+            : _isWalletLoading
+            ? '지갑 불러오는 중'
+            : 'wallet.cash_balance 기준',
         valueColor: const Color(0xFF111827),
       ),
       _buildSummaryCard(
@@ -596,7 +641,7 @@ class _StockScreenState extends State<StockScreen> {
           Expanded(
             child: Text(
               _isLoggedIn
-                  ? '현재 계정 기준 실제 자산/보유종목/거래내역 테이블 연결이 아직 안 되어 있어 0으로 표시됩니다.'
+                  ? '현재 계정 기준 보유 현금은 wallet 테이블과 연결되어 표시됩니다. 보유종목/거래내역은 아직 미연결 상태입니다.'
                   : '비로그인 상태입니다. 로그인하지 않았으므로 자산, 보유종목, 거래내역은 표시되지 않습니다.',
               style: const TextStyle(
                 fontSize: 14,
