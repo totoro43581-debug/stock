@@ -94,13 +94,24 @@ class LoginCardSection extends StatelessWidget {
           SizedBox(
             height: 18,
             child: hasError
-                ? Text(
-              errorMessage!,
-              style: const TextStyle(
-                color: Color(0xFFE11D48),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+                ? Builder(
+              builder: (context) {
+                String displayMessage = errorMessage!.trim();
+
+                // 수정5차: 로그인 오류 문구를 출력단에서 한글 변환
+                if (displayMessage.contains('Invalid login credentials')) {
+                  displayMessage = '아이디 또는 비밀번호가 다릅니다.';
+                }
+
+                return Text(
+                  displayMessage,
+                  style: const TextStyle(
+                    color: Color(0xFFE11D48),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              },
             )
                 : const SizedBox.shrink(),
           ),
