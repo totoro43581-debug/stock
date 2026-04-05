@@ -1,45 +1,65 @@
 class WalletModel {
+  final String id;
   final String userId;
   final int cashBalance;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final int totalRewardReceived;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const WalletModel({
+    required this.id,
     required this.userId,
     required this.cashBalance,
+    required this.totalRewardReceived,
     required this.createdAt,
     required this.updatedAt,
   });
 
   factory WalletModel.fromMap(Map<String, dynamic> map) {
     return WalletModel(
-      userId: map['user_id'] as String,
-      cashBalance: (map['cash_balance'] as num).toInt(),
-      createdAt: DateTime.parse(map['created_at'] as String),
-      updatedAt: DateTime.parse(map['updated_at'] as String),
+      id: (map['id'] ?? '').toString(),
+      userId: (map['user_id'] ?? '').toString(),
+      cashBalance: _readInt(
+        map['cash_balance'] ?? map['balance'],
+      ),
+      totalRewardReceived: _readInt(map['total_reward_received']),
+      createdAt: _readDateTime(map['created_at']),
+      updatedAt: _readDateTime(map['updated_at']),
     );
+  }
+
+  static int _readInt(dynamic value) {
+    if (value == null) {
+      return 0;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
+  static DateTime? _readDateTime(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    return DateTime.tryParse(value.toString());
   }
 
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'user_id': userId,
       'cash_balance': cashBalance,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'total_reward_received': totalRewardReceived,
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
     };
-  }
-
-  WalletModel copyWith({
-    String? userId,
-    int? cashBalance,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) {
-    return WalletModel(
-      userId: userId ?? this.userId,
-      cashBalance: cashBalance ?? this.cashBalance,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
   }
 }
