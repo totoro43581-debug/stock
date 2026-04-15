@@ -1,7 +1,9 @@
 import 'package:stock/feature/quest/repository/daily_quest_repository.dart';
 
 class DailyQuestService {
-  DailyQuestService();
+  DailyQuestService._();
+
+  static final DailyQuestService instance = DailyQuestService._();
 
   final DailyQuestRepository _repository = DailyQuestRepository();
 

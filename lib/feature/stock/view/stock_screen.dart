@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
-
+import 'package:stock/feature/quest/service/daily_quest_service.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -58,6 +58,7 @@ class _StockScreenState extends State<StockScreen> {
   @override
   void initState() {
     super.initState();
+    _completeOpenMarketQuest();
     _loadMarketItems();
     _loadWallet();
   }
@@ -67,6 +68,12 @@ class _StockScreenState extends State<StockScreen> {
     _searchController.dispose();
     _quantityController.dispose();
     super.dispose();
+  }
+
+  Future<void> _completeOpenMarketQuest() async {
+    try {
+      await DailyQuestService.instance.completeOpenMarketQuest();
+    } catch (_) {}
   }
 
   // 수정5차: stock_item 실제 데이터 조회

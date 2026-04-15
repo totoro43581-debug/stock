@@ -1,14 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:stock/feature/quest/service/daily_quest_service.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 
-class WalletSummarySection extends StatelessWidget {
+class WalletSummarySection extends StatefulWidget {
   final WalletModel wallet;
 
   const WalletSummarySection({
     super.key,
     required this.wallet,
   });
+
+  @override
+  State<WalletSummarySection> createState() => _WalletSummarySectionState();
+}
+
+class _WalletSummarySectionState extends State<WalletSummarySection> {
+  @override
+  void initState() {
+    super.initState();
+    _completeCheckWalletQuest();
+  }
+
+  Future<void> _completeCheckWalletQuest() async {
+    try {
+      await DailyQuestService.instance.completeCheckWalletQuest();
+    } catch (_) {}
+  }
 
   String _formatWon(int value) {
     return NumberFormat('#,###').format(value);
@@ -47,7 +65,7 @@ class WalletSummarySection extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            '${_formatWon(wallet.cashBalance)}원',
+            '${_formatWon(widget.wallet.cashBalance)}원',
             style: const TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.w800,
