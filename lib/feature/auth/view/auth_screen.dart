@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/auth/view/widget/login_card_section.dart';
 import 'package:stock/feature/auth/view/widget/register_view_section.dart';
+import 'package:stock/feature/quest/service/daily_quest_service.dart';
+
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -130,6 +132,10 @@ class _AuthScreenState extends State<AuthScreen> {
         email: email,
         password: password,
       );
+
+      try {
+        await DailyQuestService.instance.completeAttendanceQuest();
+      } catch (_) {}
 
       if (!mounted) return;
 
