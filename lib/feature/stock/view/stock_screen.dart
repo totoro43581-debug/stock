@@ -4,6 +4,7 @@ import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
+import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -26,8 +27,11 @@ class _StockScreenState extends State<StockScreen> {
   String _selectedSort = '등락률';
   bool _showOnlyOwned = false;
 
-  // 수정5차: stock repository 연결
   final StockRepository _stockRepository = StockRepository();
+
+// 수정9차: 매수/매도 거래 repository 연결
+  final StockTradeRepository _stockTradeRepository = StockTradeRepository();
+  bool _isTrading = false;
 
   WalletModel? _wallet;
   bool _isWalletLoading = false;
