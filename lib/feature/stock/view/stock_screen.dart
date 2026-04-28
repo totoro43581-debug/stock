@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/quest/service/daily_quest_service.dart';
+import 'package:stock/feature/stock/model/stock_holding_model.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
+import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
-import 'package:stock/feature/quest/service/daily_quest_service.dart';
-import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
+
+import '../model/stock_trade_history_model.dart';
+
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -14,57 +18,52 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
-  // 수정2차: 검색 / 주문 입력 컨트롤러
+  // 수정11차: 검색 / 주문 입력 컨트롤러
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _quantityController =
   TextEditingController(text: '1');
 
-  // 수정3차: 상단 가로 카테고리 탭 상태
+  // 수정11차: 상단 카테고리 / 필터 상태
   String _selectedCategoryTab = '전체';
-
-  // 수정2차: 필터 상태
   String _selectedMarketFilter = '전체';
   String _selectedSort = '등락률';
   bool _showOnlyOwned = false;
 
+  // 수정11차: 주식 / 거래 / 지갑 repository 연결
   final StockRepository _stockRepository = StockRepository();
-
-// 수정9차: 매수/매도 거래 repository 연결
   final StockTradeRepository _stockTradeRepository = StockTradeRepository();
-  bool _isTrading = false;
+  final WalletRepository _walletRepository = WalletRepository();
 
+  // 수정11차: wallet / 거래 진행 상태
   WalletModel? _wallet;
   bool _isWalletLoading = false;
+  bool _isTrading = false;
 
-  // 수정5차: 실제 stock_item 데이터 바인딩용
+  // 수정11차: 실제 DB 데이터 바인딩
   List<_StockItem> _marketItems = [];
-  final List<_HoldingItem> _holdingItems = [];
-  final List<_TradeHistoryItem> _tradeHistoryItems = [];
+  List<StockHoldingModel> _holdingItems = [];
+  List<StockTradeHistoryModel> _tradeHistoryItems = [];
 
   _StockItem? _selectedMarketItem;
 
   SupabaseClient get _supabase => Supabase.instance.client;
-
   Session? get _session => _supabase.auth.currentSession;
   User? get _user => _supabase.auth.currentUser;
 
   bool get _isLoggedIn => _session != null && _user != null;
 
-  // 수정4차: 공통 디자인 기준값
+  // 수정11차: 공통 UI 기준값
   static const double _pageMaxWidth = 1400;
   static const double _sectionGap = 20;
   static const double _cardRadius = 20;
   static const double _cardPadding = 20;
-
-  // 수정7차: 안전한 UI 정렬 기준값
   static const double _summaryCardMinHeight = 150;
 
   @override
   void initState() {
     super.initState();
     _completeOpenMarketQuest();
-    _loadMarketItems();
-    _loadWallet();
+    _loadInitialData();
   }
 
   @override
@@ -74,13 +73,22 @@ class _StockScreenState extends State<StockScreen> {
     super.dispose();
   }
 
+  // 수정11차: 화면 최초 진입 데이터 로딩
+  Future<void> _loadInitialData() async {
+    await _loadMarketItems();
+    await _loadWallet();
+    await _loadHoldings();
+    await _loadTradeHistory();
+  }
+
+  // 수정11차: 주식 화면 진입 퀘스트 완료
   Future<void> _completeOpenMarketQuest() async {
     try {
       await DailyQuestService.instance.completeOpenMarketQuest();
     } catch (_) {}
   }
 
-  // 수정5차: stock_item 실제 데이터 조회
+  // 수정11차: stock_item 실제 종목 데이터 조회
   Future<void> _loadMarketItems() async {
     try {
       final rows = await _stockRepository.fetchActiveStocks();
@@ -112,7 +120,7 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-  // 수정8차: 로그인 사용자 wallet 조회/자동생성
+  // 수정11차: 로그인 사용자 wallet 조회 / 자동 생성
   Future<void> _loadWallet() async {
     if (!_isLoggedIn || _user == null) {
       if (!mounted) return;
@@ -129,7 +137,7 @@ class _StockScreenState extends State<StockScreen> {
         _isWalletLoading = true;
       });
 
-      final wallet = await WalletRepository().ensureWallet(_user!.id);
+      final wallet = await _walletRepository.ensureWallet(_user!.id);
 
       if (!mounted) return;
       setState(() {
@@ -146,7 +154,60 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-  // 수정5차: DB market 값을 기존 화면 필터 구조에 맞게 변환
+  // 수정11차: 로그인 사용자 보유종목 조회
+  Future<void> _loadHoldings() async {
+    if (!_isLoggedIn || _user == null) {
+      if (!mounted) return;
+      setState(() {
+        _holdingItems = [];
+      });
+      return;
+    }
+
+    try {
+      final holdings = await _stockTradeRepository.fetchHoldings(_user!.id);
+
+      if (!mounted) return;
+      setState(() {
+        _holdingItems = holdings;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('보유종목을 불러오지 못했습니다: $e');
+    }
+  }
+
+  // 수정11차: 로그인 사용자 거래내역 조회
+  Future<void> _loadTradeHistory() async {
+    if (!_isLoggedIn || _user == null) {
+      if (!mounted) return;
+      setState(() {
+        _tradeHistoryItems = [];
+      });
+      return;
+    }
+
+    try {
+      final histories = await _stockTradeRepository.fetchTradeHistory(_user!.id);
+
+      if (!mounted) return;
+      setState(() {
+        _tradeHistoryItems = histories;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('거래내역을 불러오지 못했습니다: $e');
+    }
+  }
+
+  // 수정11차: 매수 / 매도 후 화면 데이터 새로고침
+  Future<void> _reloadAfterTrade() async {
+    await _loadWallet();
+    await _loadHoldings();
+    await _loadTradeHistory();
+  }
+
+  // 수정11차: DB market 값을 화면 필터 기준으로 변환
   String _mapMarketLabel(String market) {
     switch (market.toUpperCase()) {
       case 'KOSPI':
@@ -161,12 +222,66 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-// 수정8차: wallet 현금 기준 자산 계산
+  // 수정11차: 실제 보유종목 기준 자산 계산
   double get _cash => (_wallet?.cashBalance ?? 0).toDouble();
-  double get _totalStockValue => 0;
+
+  double get _totalStockValue {
+    double total = 0;
+
+    for (final holding in _holdingItems) {
+      final stock = _findMarketItemByCode(holding.stockCode);
+      if (stock == null) continue;
+
+      total += stock.currentPrice * holding.quantity;
+    }
+
+    return total;
+  }
+
   double get _totalAsset => _cash + _totalStockValue;
-  double get _totalProfitAmount => 0;
-  double get _totalProfitRate => 0;
+
+  double get _totalProfitAmount {
+    double total = 0;
+
+    for (final holding in _holdingItems) {
+      final stock = _findMarketItemByCode(holding.stockCode);
+      if (stock == null) continue;
+
+      total += (stock.currentPrice - holding.averagePrice) * holding.quantity;
+    }
+
+    return total;
+  }
+
+  double get _totalProfitRate {
+    double totalBuyAmount = 0;
+
+    for (final holding in _holdingItems) {
+      totalBuyAmount += holding.averagePrice * holding.quantity;
+    }
+
+    if (totalBuyAmount <= 0) {
+      return 0;
+    }
+
+    return (_totalProfitAmount / totalBuyAmount) * 100;
+  }
+
+  _StockItem? _findMarketItemByCode(String code) {
+    try {
+      return _marketItems.firstWhere((item) => item.code == code);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  StockHoldingModel? _findHoldingByCode(String code) {
+    try {
+      return _holdingItems.firstWhere((item) => item.stockCode == code);
+    } catch (_) {
+      return null;
+    }
+  }
 
   List<_StockItem> get _filteredItems {
     List<_StockItem> result = List.of(_marketItems);
@@ -211,7 +326,7 @@ class _StockScreenState extends State<StockScreen> {
 
     if (_showOnlyOwned) {
       result = result.where((item) {
-        return _holdingItems.any((holding) => holding.code == item.code);
+        return _holdingItems.any((holding) => holding.stockCode == item.code);
       }).toList();
     }
 
@@ -253,28 +368,123 @@ class _StockScreenState extends State<StockScreen> {
     return '$prefix${value.toStringAsFixed(2)}%';
   }
 
+  String _formatDateTime(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
+
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+
+    return '$month-$day $hour:$minute';
+  }
+
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
 
-  void _handleBuy() {
-    if (!_isLoggedIn) {
+  Future<void> _handleBuy() async {
+    if (!_isLoggedIn || _user == null) {
       _showSnackBar('로그인 후 이용 가능합니다.');
       return;
     }
 
-    _showSnackBar('실제 매수 기능은 보유 현금 / 종목 테이블 연결 후 구현합니다.');
+    if (_selectedMarketItem == null) {
+      _showSnackBar('매수할 종목을 선택해주세요.');
+      return;
+    }
+
+    final int quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+
+    if (quantity <= 0) {
+      _showSnackBar('수량은 1주 이상 입력해주세요.');
+      return;
+    }
+
+    if (_isTrading) return;
+
+    try {
+      setState(() {
+        _isTrading = true;
+      });
+
+      final item = _selectedMarketItem!;
+
+      await _stockTradeRepository.buyStock(
+        userId: _user!.id,
+        stockCode: item.code,
+        stockName: item.name,
+        price: item.currentPrice,
+        quantity: quantity,
+      );
+
+      await _reloadAfterTrade();
+
+      if (!mounted) return;
+      _showSnackBar('매수 완료: ${item.name} ${quantity}주');
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isTrading = false;
+      });
+    }
   }
 
-  void _handleSell() {
-    if (!_isLoggedIn) {
+  Future<void> _handleSell() async {
+    if (!_isLoggedIn || _user == null) {
       _showSnackBar('로그인 후 이용 가능합니다.');
       return;
     }
 
-    _showSnackBar('실제 매도 기능은 보유 종목 / 거래내역 테이블 연결 후 구현합니다.');
+    if (_selectedMarketItem == null) {
+      _showSnackBar('매도할 종목을 선택해주세요.');
+      return;
+    }
+
+    final int quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+
+    if (quantity <= 0) {
+      _showSnackBar('수량은 1주 이상 입력해주세요.');
+      return;
+    }
+
+    if (_isTrading) return;
+
+    try {
+      setState(() {
+        _isTrading = true;
+      });
+
+      final item = _selectedMarketItem!;
+
+      await _stockTradeRepository.sellStock(
+        userId: _user!.id,
+        stockCode: item.code,
+        stockName: item.name,
+        price: item.currentPrice,
+        quantity: quantity,
+      );
+
+      await _reloadAfterTrade();
+
+      if (!mounted) return;
+      _showSnackBar('매도 완료: ${item.name} ${quantity}주');
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isTrading = false;
+      });
+    }
   }
 
   BoxDecoration _cardDecoration() {
@@ -474,9 +684,7 @@ class _StockScreenState extends State<StockScreen> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: isSelected
-                        ? const Color(0xFF0F172A)
-                        : Colors.white,
+                    color: isSelected ? const Color(0xFF0F172A) : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected
@@ -504,11 +712,13 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Widget _buildSummarySection() {
+    final bool hasHolding = _holdingItems.isNotEmpty;
+
     final List<Widget> cards = [
       _buildSummaryCard(
         title: '총 자산',
         value: '₩ ${_formatPrice(_totalAsset)}',
-        subValue: _isLoggedIn ? '실제 자산 연결 전' : '비로그인 상태',
+        subValue: _isLoggedIn ? '현금 + 주식 평가금' : '비로그인 상태',
         valueColor: const Color(0xFF111827),
       ),
       _buildSummaryCard(
@@ -524,7 +734,7 @@ class _StockScreenState extends State<StockScreen> {
       _buildSummaryCard(
         title: '주식 평가금',
         value: '₩ ${_formatPrice(_totalStockValue)}',
-        subValue: _isLoggedIn ? '보유 종목 없음' : '비로그인 상태',
+        subValue: hasHolding ? '보유 종목 현재가 기준' : '보유 종목 없음',
         valueColor: const Color(0xFF111827),
       ),
       _buildSummaryCard(
@@ -644,15 +854,14 @@ class _StockScreenState extends State<StockScreen> {
         children: [
           Icon(
             _isLoggedIn ? Icons.info_outline_rounded : Icons.lock_outline_rounded,
-            color: _isLoggedIn
-                ? const Color(0xFF2563EB)
-                : const Color(0xFFB45309),
+            color:
+            _isLoggedIn ? const Color(0xFF2563EB) : const Color(0xFFB45309),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               _isLoggedIn
-                  ? '현재 계정 기준 보유 현금은 wallet 테이블과 연결되어 표시됩니다. 보유종목/거래내역은 아직 미연결 상태입니다.'
+                  ? '현재 계정 기준 보유 현금, 보유종목, 거래내역이 실제 DB와 연결되어 표시됩니다.'
                   : '비로그인 상태입니다. 로그인하지 않았으므로 자산, 보유종목, 거래내역은 표시되지 않습니다.',
               style: const TextStyle(
                 fontSize: 14,
@@ -907,6 +1116,11 @@ class _StockScreenState extends State<StockScreen> {
 
   Widget _buildListRow(_StockItem item) {
     final bool isSelected = _selectedMarketItem?.code == item.code;
+    final StockHoldingModel? holding = _findHoldingByCode(item.code);
+    final int holdingQuantity = holding?.quantity ?? 0;
+    final double profitAmount = holding == null
+        ? 0
+        : (item.currentPrice - holding.averagePrice) * holding.quantity;
 
     return InkWell(
       onTap: () {
@@ -964,31 +1178,31 @@ class _StockScreenState extends State<StockScreen> {
                 ),
               ),
             ),
-            const Expanded(
+            Expanded(
               flex: 16,
               child: Text(
-                '0주',
+                '${holdingQuantity}주',
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF111827),
                 ),
               ),
             ),
-            const Expanded(
+            Expanded(
               flex: 18,
               child: Text(
-                '0원',
+                '${_formatSignedPrice(profitAmount)}원',
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF6B7280),
+                  color: _changeColor(profitAmount),
                 ),
               ),
             ),
@@ -1019,6 +1233,13 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     final item = _selectedMarketItem!;
+    final StockHoldingModel? holding = _findHoldingByCode(item.code);
+    final int holdingQuantity = holding?.quantity ?? 0;
+    final double averagePrice = holding?.averagePrice ?? 0;
+    final double evaluatedAmount = item.currentPrice * holdingQuantity;
+    final double profitAmount = holding == null
+        ? 0
+        : (item.currentPrice - holding.averagePrice) * holding.quantity;
 
     return Container(
       width: double.infinity,
@@ -1078,7 +1299,7 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '보유수량',
-                  value: '0주',
+                  value: '${holdingQuantity}주',
                   valueColor: const Color(0xFF111827),
                 ),
               ),
@@ -1086,7 +1307,7 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '평균단가',
-                  value: '-',
+                  value: holding == null ? '-' : '₩ ${_formatPrice(averagePrice)}',
                   valueColor: const Color(0xFF111827),
                 ),
               ),
@@ -1098,7 +1319,7 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '평가금액',
-                  value: '₩ 0',
+                  value: '₩ ${_formatPrice(evaluatedAmount)}',
                   valueColor: const Color(0xFF111827),
                 ),
               ),
@@ -1106,8 +1327,8 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '평가손익',
-                  value: '0원',
-                  valueColor: const Color(0xFF6B7280),
+                  value: '${_formatSignedPrice(profitAmount)}원',
+                  valueColor: _changeColor(profitAmount),
                 ),
               ),
             ],
@@ -1228,7 +1449,7 @@ class _StockScreenState extends State<StockScreen> {
             ),
             child: Text(
               _isLoggedIn
-                  ? '실제 매수/매도는 user_wallet, stock_holding, stock_trade_history 연결 후 활성화됩니다.'
+                  ? '선택한 종목과 입력한 수량 기준으로 매수/매도가 실행됩니다.'
                   : '비로그인 상태에서는 주문할 수 없습니다.',
               style: const TextStyle(
                 fontSize: 13,
@@ -1244,7 +1465,7 @@ class _StockScreenState extends State<StockScreen> {
                 child: SizedBox(
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _isLoggedIn ? _handleBuy : null,
+                    onPressed: _isLoggedIn && !_isTrading ? _handleBuy : null,
                     style: ElevatedButton.styleFrom(
                       elevation: 0,
                       backgroundColor: const Color(0xFF16A34A),
@@ -1255,9 +1476,9 @@ class _StockScreenState extends State<StockScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      '매수',
-                      style: TextStyle(
+                    child: Text(
+                      _isTrading ? '처리 중' : '매수',
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
@@ -1270,7 +1491,7 @@ class _StockScreenState extends State<StockScreen> {
                 child: SizedBox(
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _isLoggedIn ? _handleSell : null,
+                    onPressed: _isLoggedIn && !_isTrading ? _handleSell : null,
                     style: ElevatedButton.styleFrom(
                       elevation: 0,
                       backgroundColor: const Color(0xFFDC2626),
@@ -1281,9 +1502,9 @@ class _StockScreenState extends State<StockScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      '매도',
-                      style: TextStyle(
+                    child: Text(
+                      _isTrading ? '처리 중' : '매도',
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
@@ -1383,8 +1604,9 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _buildTradeHistoryRow(_TradeHistoryItem item) {
-    final bool isBuy = item.tradeType == '매수';
+  Widget _buildTradeHistoryRow(StockTradeHistoryModel item) {
+    final bool isBuy = item.tradeType == 'buy';
+    final String tradeLabel = isBuy ? '매수' : '매도';
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1393,19 +1615,16 @@ class _StockScreenState extends State<StockScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: isBuy
-                  ? const Color(0xFFECFDF5)
-                  : const Color(0xFFFEF2F2),
+              color: isBuy ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              item.tradeType,
+              tradeLabel,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: isBuy
-                    ? const Color(0xFF047857)
-                    : const Color(0xFFB91C1C),
+                color:
+                isBuy ? const Color(0xFF047857) : const Color(0xFFB91C1C),
               ),
             ),
           ),
@@ -1441,7 +1660,7 @@ class _StockScreenState extends State<StockScreen> {
           SizedBox(
             width: 110,
             child: Text(
-              item.dateText,
+              _formatDateTime(item.createdAt),
               textAlign: TextAlign.right,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1472,33 +1691,5 @@ class _StockItem {
     required this.currentPrice,
     required this.changeRate,
     required this.description,
-  });
-}
-
-class _HoldingItem {
-  final String code;
-  final int quantity;
-  final double averagePrice;
-
-  _HoldingItem({
-    required this.code,
-    required this.quantity,
-    required this.averagePrice,
-  });
-}
-
-class _TradeHistoryItem {
-  final String stockName;
-  final String tradeType;
-  final int quantity;
-  final double price;
-  final String dateText;
-
-  _TradeHistoryItem({
-    required this.stockName,
-    required this.tradeType,
-    required this.quantity,
-    required this.price,
-    required this.dateText,
   });
 }

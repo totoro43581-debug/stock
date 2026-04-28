@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
-import 'package:stock/feature/stock/repository/stock_trade_history_model.dart';
+import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 
