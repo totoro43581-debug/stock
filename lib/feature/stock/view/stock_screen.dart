@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
+import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 
-import '../model/stock_trade_history_model.dart';
+import 'dart:async';
+import 'dart:math';
 
 
 class StockScreen extends StatefulWidget {
@@ -18,6 +20,10 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
+
+  Timer? _priceTimer;
+  final Random _random = Random();
+
   // 수정11차: 검색 / 주문 입력 컨트롤러
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _quantityController =
@@ -64,12 +70,18 @@ class _StockScreenState extends State<StockScreen> {
     super.initState();
     _completeOpenMarketQuest();
     _loadInitialData();
+    _startPriceSimulation();
+    
+    _quantityController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _quantityController.dispose();
+    _priceTimer?.cancel();
     super.dispose();
   }
 
@@ -356,6 +368,32 @@ class _StockScreenState extends State<StockScreen> {
       RegExp(r'\B(?=(\d{3})+(?!\d))'),
           (match) => ',',
     );
+    void _startPriceSimulation() {
+      _priceTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (!mounted) return;
+
+        setState(() {
+          for (int i = 0; i < _marketItems.length; i++) {
+            final item = _marketItems[i];
+
+            final double changePercent =
+                (_random.nextDouble() * 0.06) - 0.03;
+
+            final double newPrice =
+                item.currentPrice * (1 + changePercent);
+
+            _marketItems[i] = _StockItem(
+              code: item.code,
+              name: item.name,
+              market: item.market,
+              currentPrice: newPrice,
+              changeRate: changePercent * 100,
+              description: item.description,
+            );
+          }
+        });
+      });
+    }
   }
 
   String _formatSignedPrice(num value) {
@@ -1447,15 +1485,34 @@ class _StockScreenState extends State<StockScreen> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
-            child: Text(
-              _isLoggedIn
-                  ? '선택한 종목과 입력한 수량 기준으로 매수/매도가 실행됩니다.'
-                  : '비로그인 상태에서는 주문할 수 없습니다.',
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.6,
-                color: Color(0xFF6B7280),
-              ),
+            child: _selectedMarketItem == null
+                ? const Text('종목 선택 필요')
+                : Builder(
+              builder: (_) {
+                final int qty =
+                    int.tryParse(_quantityController.text) ?? 0;
+
+                final double price =
+                    _selectedMarketItem!.currentPrice;
+
+                final int total = (price * qty).round();
+
+                final int afterCash =
+                (_cash - total).round();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('현재가: ₩ ${_formatPrice(price)}'),
+                    Text('수량: $qty주'),
+
+                    const SizedBox(height: 8),
+
+                    Text('결제금액: ₩ ${_formatPrice(total)}'),
+                    Text('매수 후 현금: ₩ ${_formatPrice(afterCash)}'),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 16),
@@ -1673,6 +1730,33 @@ class _StockScreenState extends State<StockScreen> {
         ],
       ),
     );
+  }
+
+  void _startPriceSimulation() {
+    _priceTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+
+      setState(() {
+        for (int i = 0; i < _marketItems.length; i++) {
+          final item = _marketItems[i];
+
+          final double changePercent =
+              (_random.nextDouble() * 0.06) - 0.03;
+
+          final double newPrice =
+              item.currentPrice * (1 + changePercent);
+
+          _marketItems[i] = _StockItem(
+            code: item.code,
+            name: item.name,
+            market: item.market,
+            currentPrice: newPrice,
+            changeRate: changePercent * 100,
+            description: item.description,
+          );
+        }
+      });
+    });
   }
 }
 

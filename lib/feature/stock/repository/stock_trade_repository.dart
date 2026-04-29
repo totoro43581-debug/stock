@@ -36,6 +36,7 @@ class StockTradeRepository {
         .toList();
   }
 
+  // 수정1차: 매수 검증 로직 강화
   Future<void> buyStock({
     required String userId,
     required String stockCode,
@@ -43,14 +44,28 @@ class StockTradeRepository {
     required double price,
     required int quantity,
   }) async {
+    if (userId.trim().isEmpty) {
+      throw Exception('로그인 정보가 올바르지 않습니다.');
+    }
+
+    if (stockCode.trim().isEmpty || stockName.trim().isEmpty) {
+      throw Exception('종목 정보가 올바르지 않습니다.');
+    }
+
+    if (price <= 0) {
+      throw Exception('종목 가격이 올바르지 않습니다.');
+    }
+
     if (quantity <= 0) {
       throw Exception('수량은 1주 이상이어야 합니다.');
     }
 
-    final double totalAmount = price * quantity;
+    final double rawAmount = price * quantity;
+    final double fee = rawAmount * 0.0015;
+    final int totalAmount = (rawAmount - fee).round();
     final WalletModel wallet = await _walletRepository.ensureWallet(userId);
 
-    if (wallet.cashBalance < totalAmount.toInt()) {
+    if (wallet.cashBalance < totalAmount) {
       throw Exception('보유 현금이 부족합니다.');
     }
 
@@ -70,11 +85,14 @@ class StockTradeRepository {
         'average_price': price,
       });
     } else {
-      final currentQuantity = (existing['quantity'] as num?)?.toInt() ?? 0;
-      final currentAveragePrice =
+      final int currentQuantity =
+          (existing['quantity'] as num?)?.toInt() ?? 0;
+
+      final double currentAveragePrice =
       ((existing['average_price'] as num?) ?? 0).toDouble();
 
       final int newQuantity = currentQuantity + quantity;
+
       final double newAveragePrice =
           ((currentQuantity * currentAveragePrice) + (quantity * price)) /
               newQuantity;
@@ -90,7 +108,7 @@ class StockTradeRepository {
 
     await _walletRepository.updateCashBalance(
       userId: userId,
-      cashBalance: wallet.cashBalance - totalAmount.toInt(),
+      cashBalance: wallet.cashBalance - totalAmount,
     );
 
     await _client.from('stock_trade_history').insert({
@@ -104,6 +122,7 @@ class StockTradeRepository {
     });
   }
 
+  // 수정1차: 매도 검증 로직 강화
   Future<void> sellStock({
     required String userId,
     required String stockCode,
@@ -111,6 +130,18 @@ class StockTradeRepository {
     required double price,
     required int quantity,
   }) async {
+    if (userId.trim().isEmpty) {
+      throw Exception('로그인 정보가 올바르지 않습니다.');
+    }
+
+    if (stockCode.trim().isEmpty || stockName.trim().isEmpty) {
+      throw Exception('종목 정보가 올바르지 않습니다.');
+    }
+
+    if (price <= 0) {
+      throw Exception('종목 가격이 올바르지 않습니다.');
+    }
+
     if (quantity <= 0) {
       throw Exception('수량은 1주 이상이어야 합니다.');
     }
@@ -126,12 +157,21 @@ class StockTradeRepository {
       throw Exception('보유 중인 종목이 아닙니다.');
     }
 
-    final currentQuantity = (existing['quantity'] as num?)?.toInt() ?? 0;
+    final int currentQuantity =
+        (existing['quantity'] as num?)?.toInt() ?? 0;
+
+    if (currentQuantity <= 0) {
+      throw Exception('보유 수량이 없습니다.');
+    }
+
     if (currentQuantity < quantity) {
       throw Exception('보유 수량이 부족합니다.');
     }
 
-    final double totalAmount = price * quantity;
+    final double rawAmount = price * quantity;
+    final double fee = rawAmount * 0.0015;
+    final int totalAmount = (rawAmount + fee).round();
+
     final WalletModel wallet = await _walletRepository.ensureWallet(userId);
 
     final int remainQuantity = currentQuantity - quantity;
@@ -152,7 +192,7 @@ class StockTradeRepository {
 
     await _walletRepository.updateCashBalance(
       userId: userId,
-      cashBalance: wallet.cashBalance + totalAmount.toInt(),
+      cashBalance: wallet.cashBalance + totalAmount,
     );
 
     await _client.from('stock_trade_history').insert({
