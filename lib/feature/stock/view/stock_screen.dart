@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
@@ -8,10 +11,6 @@ import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 
-import 'dart:async';
-import 'dart:math';
-
-
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
 
@@ -20,7 +19,6 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
-
   Timer? _priceTimer;
   final Random _random = Random();
 
@@ -71,7 +69,7 @@ class _StockScreenState extends State<StockScreen> {
     _completeOpenMarketQuest();
     _loadInitialData();
     _startPriceSimulation();
-    
+
     _quantityController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -368,32 +366,6 @@ class _StockScreenState extends State<StockScreen> {
       RegExp(r'\B(?=(\d{3})+(?!\d))'),
           (match) => ',',
     );
-    void _startPriceSimulation() {
-      _priceTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-        if (!mounted) return;
-
-        setState(() {
-          for (int i = 0; i < _marketItems.length; i++) {
-            final item = _marketItems[i];
-
-            final double changePercent =
-                (_random.nextDouble() * 0.06) - 0.03;
-
-            final double newPrice =
-                item.currentPrice * (1 + changePercent);
-
-            _marketItems[i] = _StockItem(
-              code: item.code,
-              name: item.name,
-              market: item.market,
-              currentPrice: newPrice,
-              changeRate: changePercent * 100,
-              description: item.description,
-            );
-          }
-        });
-      });
-    }
   }
 
   String _formatSignedPrice(num value) {
@@ -1492,22 +1464,18 @@ class _StockScreenState extends State<StockScreen> {
                 final int qty =
                     int.tryParse(_quantityController.text) ?? 0;
 
-                final double price =
-                    _selectedMarketItem!.currentPrice;
+                final double price = _selectedMarketItem!.currentPrice;
 
                 final int total = (price * qty).round();
 
-                final int afterCash =
-                (_cash - total).round();
+                final int afterCash = (_cash - total).round();
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('현재가: ₩ ${_formatPrice(price)}'),
                     Text('수량: $qty주'),
-
                     const SizedBox(height: 8),
-
                     Text('결제금액: ₩ ${_formatPrice(total)}'),
                     Text('매수 후 현금: ₩ ${_formatPrice(afterCash)}'),
                   ],
@@ -1732,21 +1700,24 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  // 수정12차: 가격 자동 변동 함수
   void _startPriceSimulation() {
+    _priceTimer?.cancel();
+
     _priceTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!mounted) return;
+      if (!mounted || _marketItems.isEmpty) return;
 
       setState(() {
         for (int i = 0; i < _marketItems.length; i++) {
           final item = _marketItems[i];
 
-          final double changePercent =
-              (_random.nextDouble() * 0.06) - 0.03;
+          final double changePercent = (_random.nextDouble() * 0.06) - 0.03;
 
-          final double newPrice =
-              item.currentPrice * (1 + changePercent);
+          final double newPrice = (item.currentPrice * (1 + changePercent))
+              .clamp(100.0, 100000000.0)
+              .toDouble();
 
-          _marketItems[i] = _StockItem(
+          final updatedItem = _StockItem(
             code: item.code,
             name: item.name,
             market: item.market,
@@ -1754,6 +1725,12 @@ class _StockScreenState extends State<StockScreen> {
             changeRate: changePercent * 100,
             description: item.description,
           );
+
+          _marketItems[i] = updatedItem;
+
+          if (_selectedMarketItem?.code == item.code) {
+            _selectedMarketItem = updatedItem;
+          }
         }
       });
     });
