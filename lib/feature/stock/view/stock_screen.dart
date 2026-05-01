@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
@@ -10,6 +12,7 @@ import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
+import 'package:stock/feature/stock/view/stock_register_screen.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -19,6 +22,10 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
+
+  // 수정14차: 차트 데이터
+  final List<double> _priceHistory = [];
+
   Timer? _priceTimer;
   final Random _random = Random();
 
@@ -30,7 +37,7 @@ class _StockScreenState extends State<StockScreen> {
   // 수정11차: 상단 카테고리 / 필터 상태
   String _selectedCategoryTab = '전체';
   String _selectedMarketFilter = '전체';
-  String _selectedSort = '등락률';
+  String _selectedSort = '이름';
   bool _showOnlyOwned = false;
 
   // 수정11차: 주식 / 거래 / 지갑 repository 연결
@@ -634,24 +641,57 @@ class _StockScreenState extends State<StockScreen> {
           ),
         ],
       ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            '주식',
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '주식',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  '실제 보유 데이터 기준 자산, 보유종목, 거래내역이 표시됩니다.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFFCBD5E1),
+                    height: 1.6,
+                  ),
+                ),
+              ],
             ),
           ),
-          SizedBox(height: 10),
-          Text(
-            '실제 보유 데이터 기준 자산, 보유종목, 거래내역이 표시됩니다.',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFFCBD5E1),
-              height: 1.6,
+          SizedBox(
+            height: 44,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const StockRegisterScreen(),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                elevation: 0,
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text(
+                '종목 등록',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ),
         ],
@@ -1136,6 +1176,8 @@ class _StockScreenState extends State<StockScreen> {
       onTap: () {
         setState(() {
           _selectedMarketItem = item;
+          _priceHistory.clear();
+          _priceHistory.add(item.currentPrice);
         });
       },
       borderRadius: BorderRadius.circular(14),
@@ -1544,6 +1586,7 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  // 수정14차: 차트 영역 실제 라인 차트 연결
   Widget _buildChartPlaceholderSection() {
     return Container(
       width: double.infinity,
@@ -1571,12 +1614,37 @@ class _StockScreenState extends State<StockScreen> {
                 color: const Color(0xFFE5E7EB),
               ),
             ),
-            child: const Center(
+            child: _priceHistory.isEmpty
+                ? const Center(
               child: Text(
-                '차트는 종목 시세 데이터 연결 후 표시됩니다.',
+                '차트 데이터 없음',
                 style: TextStyle(
                   fontSize: 14,
                   color: Color(0xFF6B7280),
+                ),
+              ),
+            )
+                : Padding(
+              padding: const EdgeInsets.all(12),
+              child: LineChart(
+                LineChartData(
+                  gridData: FlGridData(show: false),
+                  titlesData: FlTitlesData(show: false),
+                  borderData: FlBorderData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      isCurved: true,
+                      spots: List.generate(
+                        _priceHistory.length,
+                            (index) => FlSpot(
+                          index.toDouble(),
+                          _priceHistory[index],
+                        ),
+                      ),
+                      dotData: FlDotData(show: false),
+                      barWidth: 2,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1700,18 +1768,18 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  // 수정12차: 가격 자동 변동 함수
+// 수정15차: 가격 자동 변동 + 선택 종목 차트 데이터 저장
   void _startPriceSimulation() {
     _priceTimer?.cancel();
 
-    _priceTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _priceTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted || _marketItems.isEmpty) return;
 
       setState(() {
         for (int i = 0; i < _marketItems.length; i++) {
           final item = _marketItems[i];
 
-          final double changePercent = (_random.nextDouble() * 0.06) - 0.03;
+          final double changePercent = (_random.nextDouble() * 0.006) - 0.003;
 
           final double newPrice = (item.currentPrice * (1 + changePercent))
               .clamp(100.0, 100000000.0)
@@ -1730,6 +1798,12 @@ class _StockScreenState extends State<StockScreen> {
 
           if (_selectedMarketItem?.code == item.code) {
             _selectedMarketItem = updatedItem;
+
+            _priceHistory.add(newPrice);
+
+            if (_priceHistory.length > 30) {
+              _priceHistory.removeAt(0);
+            }
           }
         }
       });
