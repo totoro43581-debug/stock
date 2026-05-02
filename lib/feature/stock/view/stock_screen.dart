@@ -14,6 +14,11 @@ import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 import 'package:stock/feature/stock/view/stock_register_screen.dart';
 
+import 'package:stock/feature/stock/model/stock_price_model.dart';
+import 'package:stock/feature/stock/repository/stock_price_repository.dart';
+import 'package:stock/feature/stock/view/widget/stock_price_chart.dart';
+
+
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
 
@@ -22,6 +27,49 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
+
+  final StockPriceRepository _stockPriceRepository = StockPriceRepository();
+
+  List<StockPriceModel> _selectedStockPrices = [];
+  bool _isChartLoading = false;
+  String? _selectedStockId;
+  String? _selectedStockName;
+
+  Future<void> _loadStockChart(String stockId, String stockName) async {
+    setState(() {
+      _isChartLoading = true;
+      _selectedStockId = stockId;
+      _selectedStockName = stockName;
+    });
+
+    try {
+      final prices = await _stockPriceRepository.fetchPricesByStockId(stockId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedStockPrices = prices;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _selectedStockPrices = [];
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('차트 데이터를 불러오지 못했습니다. $e'),
+        ),
+      );
+    } finally {
+      if (!mounted) return;
+
+      setState(() {
+        _isChartLoading = false;
+      });
+    }
+  }
 
   // 수정14차: 차트 데이터
   final List<double> _priceHistory = [];
@@ -75,7 +123,8 @@ class _StockScreenState extends State<StockScreen> {
     super.initState();
     _completeOpenMarketQuest();
     _loadInitialData();
-    _startPriceSimulation();
+    // 수정2차: 실제 DB 차트 연결 중이므로 랜덤 가격 시뮬레이션 임시 중지
+    //_startPriceSimulation();
 
     _quantityController.addListener(() {
       if (mounted) setState(() {});
@@ -112,6 +161,7 @@ class _StockScreenState extends State<StockScreen> {
 
       final items = rows.map((row) {
         return _StockItem(
+          id: row['id'].toString(),
           code: (row['code'] ?? '').toString(),
           name: (row['name'] ?? '').toString(),
           market: _mapMarketLabel((row['market'] ?? '').toString()),
@@ -129,6 +179,10 @@ class _StockScreenState extends State<StockScreen> {
         _marketItems = items;
         if (_selectedMarketItem == null && items.isNotEmpty) {
           _selectedMarketItem = items.first;
+
+          Future.microtask(() {
+            _loadStockChart(items.first.id, items.first.name);
+          });
         }
       });
     } catch (e) {
@@ -1176,9 +1230,9 @@ class _StockScreenState extends State<StockScreen> {
       onTap: () {
         setState(() {
           _selectedMarketItem = item;
-          _priceHistory.clear();
-          _priceHistory.add(item.currentPrice);
         });
+
+        _loadStockChart(item.id, item.name);
       },
       borderRadius: BorderRadius.circular(14),
       child: Container(
@@ -1595,60 +1649,33 @@ class _StockScreenState extends State<StockScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '차트 영역',
-            style: TextStyle(
+          Text(
+            _selectedStockName == null
+                ? '차트 영역'
+                : '$_selectedStockName 차트',
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827),
             ),
           ),
           const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            height: 220,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: const Color(0xFFE5E7EB),
+
+          if (_isChartLoading)
+            Container(
+              height: 260,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                borderRadius: BorderRadius.circular(16),
               ),
-            ),
-            child: _priceHistory.isEmpty
-                ? const Center(
-              child: Text(
-                '차트 데이터 없음',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF6B7280),
-                ),
-              ),
+              child: const CircularProgressIndicator(),
             )
-                : Padding(
-              padding: const EdgeInsets.all(12),
-              child: LineChart(
-                LineChartData(
-                  gridData: FlGridData(show: false),
-                  titlesData: FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      isCurved: true,
-                      spots: List.generate(
-                        _priceHistory.length,
-                            (index) => FlSpot(
-                          index.toDouble(),
-                          _priceHistory[index],
-                        ),
-                      ),
-                      dotData: FlDotData(show: false),
-                      barWidth: 2,
-                    ),
-                  ],
-                ),
-              ),
+          else
+            StockPriceChart(
+              prices: _selectedStockPrices,
             ),
-          ),
         ],
       ),
     );
@@ -1786,6 +1813,7 @@ class _StockScreenState extends State<StockScreen> {
               .toDouble();
 
           final updatedItem = _StockItem(
+            id: item.id,
             code: item.code,
             name: item.name,
             market: item.market,
@@ -1812,6 +1840,7 @@ class _StockScreenState extends State<StockScreen> {
 }
 
 class _StockItem {
+  final String id;
   final String code;
   final String name;
   final String market;
@@ -1820,6 +1849,7 @@ class _StockItem {
   final String description;
 
   _StockItem({
+    required this.id,
     required this.code,
     required this.name,
     required this.market,
