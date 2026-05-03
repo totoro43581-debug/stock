@@ -2,22 +2,19 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
+import 'package:stock/feature/stock/model/stock_price_model.dart';
 import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
+import 'package:stock/feature/stock/repository/stock_price_repository.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
+import 'package:stock/feature/stock/view/stock_register_screen.dart';
+import 'package:stock/feature/stock/view/widget/stock_price_chart.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
-import 'package:stock/feature/stock/view/stock_register_screen.dart';
-
-import 'package:stock/feature/stock/model/stock_price_model.dart';
-import 'package:stock/feature/stock/repository/stock_price_repository.dart';
-import 'package:stock/feature/stock/view/widget/stock_price_chart.dart';
-
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -27,49 +24,12 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
-
   final StockPriceRepository _stockPriceRepository = StockPriceRepository();
 
   List<StockPriceModel> _selectedStockPrices = [];
   bool _isChartLoading = false;
   String? _selectedStockId;
   String? _selectedStockName;
-
-  Future<void> _loadStockChart(String stockId, String stockName) async {
-    setState(() {
-      _isChartLoading = true;
-      _selectedStockId = stockId;
-      _selectedStockName = stockName;
-    });
-
-    try {
-      final prices = await _stockPriceRepository.fetchPricesByStockId(stockId);
-
-      if (!mounted) return;
-
-      setState(() {
-        _selectedStockPrices = prices;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _selectedStockPrices = [];
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('차트 데이터를 불러오지 못했습니다. $e'),
-        ),
-      );
-    } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isChartLoading = false;
-      });
-    }
-  }
 
   // 수정14차: 차트 데이터
   final List<double> _priceHistory = [];
@@ -123,6 +83,7 @@ class _StockScreenState extends State<StockScreen> {
     super.initState();
     _completeOpenMarketQuest();
     _loadInitialData();
+
     // 수정2차: 실제 DB 차트 연결 중이므로 랜덤 가격 시뮬레이션 임시 중지
     //_startPriceSimulation();
 
@@ -137,6 +98,44 @@ class _StockScreenState extends State<StockScreen> {
     _quantityController.dispose();
     _priceTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadStockChart(String stockId, String stockName) async {
+    setState(() {
+      _isChartLoading = true;
+      _selectedStockId = stockId;
+      _selectedStockName = stockName;
+    });
+
+    try {
+      debugPrint('수정16차 선택 stockId: $stockId / stockName: $stockName');
+
+      final prices = await _stockPriceRepository.fetchPricesByStockId(stockId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedStockPrices = prices;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _selectedStockPrices = [];
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('차트 데이터를 불러오지 못했습니다. $e'),
+        ),
+      );
+    } finally {
+      if (!mounted) return;
+
+      setState(() {
+        _isChartLoading = false;
+      });
+    }
   }
 
   // 수정11차: 화면 최초 진입 데이터 로딩
@@ -154,14 +153,12 @@ class _StockScreenState extends State<StockScreen> {
     } catch (_) {}
   }
 
-  // 수정11차: stock_item 실제 종목 데이터 조회
+  // 수정16차: stock_item 실제 종목 데이터 조회 + 디버그 로그 추가
   Future<void> _loadMarketItems() async {
     try {
       final rows = await _stockRepository.fetchActiveStocks();
 
       debugPrint('수정16차 stock rows: $rows');
-
-      final items = rows.map((row)
 
       final items = rows.map((row) {
         return _StockItem(
@@ -181,6 +178,7 @@ class _StockScreenState extends State<StockScreen> {
 
       setState(() {
         _marketItems = items;
+
         if (_selectedMarketItem == null && items.isNotEmpty) {
           _selectedMarketItem = items.first;
 
@@ -961,7 +959,9 @@ class _StockScreenState extends State<StockScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
-            _isLoggedIn ? Icons.info_outline_rounded : Icons.lock_outline_rounded,
+            _isLoggedIn
+                ? Icons.info_outline_rounded
+                : Icons.lock_outline_rounded,
             color:
             _isLoggedIn ? const Color(0xFF2563EB) : const Color(0xFFB45309),
           ),
@@ -1291,7 +1291,7 @@ class _StockScreenState extends State<StockScreen> {
             Expanded(
               flex: 16,
               child: Text(
-                '${holdingQuantity}주',
+                '$holdingQuantity주',
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1409,7 +1409,7 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '보유수량',
-                  value: '${holdingQuantity}주',
+                  value: '$holdingQuantity주',
                   valueColor: const Color(0xFF111827),
                 ),
               ),
@@ -1417,7 +1417,8 @@ class _StockScreenState extends State<StockScreen> {
               Expanded(
                 child: _buildDetailMetric(
                   title: '평균단가',
-                  value: holding == null ? '-' : '₩ ${_formatPrice(averagePrice)}',
+                  value:
+                  holding == null ? '-' : '₩ ${_formatPrice(averagePrice)}',
                   valueColor: const Color(0xFF111827),
                 ),
               ),
@@ -1654,9 +1655,7 @@ class _StockScreenState extends State<StockScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            _selectedStockName == null
-                ? '차트 영역'
-                : '$_selectedStockName 차트',
+            _selectedStockName == null ? '차트 영역' : '$_selectedStockName 차트',
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -1664,7 +1663,6 @@ class _StockScreenState extends State<StockScreen> {
             ),
           ),
           const SizedBox(height: 14),
-
           if (_isChartLoading)
             Container(
               height: 260,
@@ -1799,7 +1797,7 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-// 수정15차: 가격 자동 변동 + 선택 종목 차트 데이터 저장
+  // 수정15차: 가격 자동 변동 + 선택 종목 차트 데이터 저장
   void _startPriceSimulation() {
     _priceTimer?.cancel();
 
