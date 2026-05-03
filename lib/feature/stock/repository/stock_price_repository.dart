@@ -7,9 +7,9 @@ class StockPriceRepository {
   Future<List<StockPriceModel>> fetchPricesByStockId(String stockId) async {
     final response = await _client
         .from('stock_prices')
-        .select('id, stock_id, price, recorded_at')
+        .select('id, stock_id, price, created_at')
         .eq('stock_id', stockId)
-        .order('recorded_at', ascending: true);
+        .order('created_at', ascending: true);
 
     return List<Map<String, dynamic>>.from(response)
         .map((e) => StockPriceModel.fromMap(e))

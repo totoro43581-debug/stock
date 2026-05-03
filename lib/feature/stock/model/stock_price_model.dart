@@ -16,7 +16,7 @@ class StockPriceModel {
       id: map['id'].toString(),
       stockId: map['stock_id'].toString(),
       price: (map['price'] as num).toDouble(),
-      recordedAt: DateTime.parse(map['recorded_at'].toString()),
+      recordedAt: DateTime.parse(map['created_at'].toString()),
     );
   }
 }

@@ -159,6 +159,10 @@ class _StockScreenState extends State<StockScreen> {
     try {
       final rows = await _stockRepository.fetchActiveStocks();
 
+      debugPrint('수정16차 stock rows: $rows');
+
+      final items = rows.map((row)
+
       final items = rows.map((row) {
         return _StockItem(
           id: row['id'].toString(),
