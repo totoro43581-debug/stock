@@ -35,6 +35,11 @@ class _StockScreenState extends State<StockScreen> {
   final List<double> _priceHistory = [];
 
   Timer? _priceTimer;
+
+  // 수정20차: DB 기반 실시간 가격 자동 갱신 타이머
+  Timer? _realtimePriceTimer;
+  bool _isRealtimeUpdating = false;
+
   final Random _random = Random();
 
   // 수정11차: 검색 / 주문 입력 컨트롤러
@@ -83,6 +88,7 @@ class _StockScreenState extends State<StockScreen> {
     super.initState();
     _completeOpenMarketQuest();
     _loadInitialData();
+    _startRealtimePriceUpdate();
 
     // 수정2차: 실제 DB 차트 연결 중이므로 랜덤 가격 시뮬레이션 임시 중지
     //_startPriceSimulation();
@@ -97,6 +103,7 @@ class _StockScreenState extends State<StockScreen> {
     _searchController.dispose();
     _quantityController.dispose();
     _priceTimer?.cancel();
+    _realtimePriceTimer?.cancel();
     super.dispose();
   }
 
@@ -136,6 +143,39 @@ class _StockScreenState extends State<StockScreen> {
         _isChartLoading = false;
       });
     }
+  }
+
+  // 수정20차: Supabase RPC 기반 실시간 가격 자동 갱신
+  void _startRealtimePriceUpdate() {
+    _realtimePriceTimer?.cancel();
+
+    _realtimePriceTimer = Timer.periodic(
+      const Duration(seconds: 30),
+          (_) async {
+        if (!mounted || _isRealtimeUpdating) return;
+
+        try {
+          _isRealtimeUpdating = true;
+
+          await _stockPriceRepository.simulateStockPrices();
+
+          await _loadMarketItems();
+
+          final selectedItem = _selectedMarketItem;
+
+          if (selectedItem != null) {
+            await _loadStockChart(
+              selectedItem.id,
+              selectedItem.name,
+            );
+          }
+        } catch (e) {
+          debugPrint('수정20차 실시간 가격 갱신 실패: $e');
+        } finally {
+          _isRealtimeUpdating = false;
+        }
+      },
+    );
   }
 
   // 수정11차: 화면 최초 진입 데이터 로딩
