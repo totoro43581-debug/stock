@@ -15,6 +15,8 @@ import 'package:stock/feature/stock/view/stock_register_screen.dart';
 import 'package:stock/feature/stock/view/widget/stock_price_chart.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
+import 'package:stock/feature/stock/model/stock_candle_model.dart';
+
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -26,7 +28,7 @@ class StockScreen extends StatefulWidget {
 class _StockScreenState extends State<StockScreen> {
   final StockPriceRepository _stockPriceRepository = StockPriceRepository();
 
-  List<StockPriceModel> _selectedStockPrices = [];
+  List<StockCandleModel> _selectedStockPrices = [];
   bool _isChartLoading = false;
   String? _selectedStockId;
   String? _selectedStockName;
@@ -117,7 +119,7 @@ class _StockScreenState extends State<StockScreen> {
     try {
       debugPrint('수정16차 선택 stockId: $stockId / stockName: $stockName');
 
-      final prices = await _stockPriceRepository.fetchPricesByStockId(stockId);
+      final prices = await _stockPriceRepository.fetchCandlesByStockId(stockId);
 
       if (!mounted) return;
 

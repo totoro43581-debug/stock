@@ -1,10 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:stock/feature/stock/model/stock_price_model.dart';
+import 'package:stock/feature/stock/model/stock_candle_model.dart';
 
 class StockPriceChart extends StatefulWidget {
-  final List<StockPriceModel> prices;
+  final List<StockCandleModel> prices;
 
   const StockPriceChart({
     super.key,
@@ -27,7 +27,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
     '전체',
   ];
 
-  List<StockPriceModel> get _filteredPrices {
+  List<StockCandleModel> get _filteredCandles {
     if (widget.prices.isEmpty) return [];
 
     final sorted = [...widget.prices]
@@ -62,42 +62,14 @@ class _StockPriceChartState extends State<StockPriceChart> {
           item.createdAt.isAtSameMomentAs(start);
     }).toList();
 
-    return filtered.length < 2 ? sorted : filtered;
-  }
-
-  List<_CandleItem> _buildCandles(List<StockPriceModel> prices) {
-    if (prices.length < 2) return [];
-
-    final List<_CandleItem> candles = [];
-
-    for (int i = 1; i < prices.length; i++) {
-      final previous = prices[i - 1];
-      final current = prices[i];
-
-      final open = previous.price;
-      final close = current.price;
-      final high = max(open, close);
-      final low = min(open, close);
-
-      candles.add(
-        _CandleItem(
-          date: current.createdAt,
-          open: open,
-          high: high,
-          low: low,
-          close: close,
-        ),
-      );
-    }
-
-    return candles;
+    return filtered.isEmpty ? sorted : filtered;
   }
 
   @override
   Widget build(BuildContext context) {
-    final prices = _filteredPrices;
+    final candles = _filteredCandles;
 
-    if (prices.isEmpty) {
+    if (candles.isEmpty) {
       return Container(
         height: 260,
         alignment: Alignment.center,
@@ -112,25 +84,8 @@ class _StockPriceChartState extends State<StockPriceChart> {
       );
     }
 
-    final candles = _buildCandles(prices);
-
-    if (candles.isEmpty) {
-      return Container(
-        height: 260,
-        alignment: Alignment.center,
-        decoration: _boxDecoration(),
-        child: const Text(
-          '캔들 차트를 표시하려면 가격 이력이 2개 이상 필요합니다.',
-          style: TextStyle(
-            fontSize: 14,
-            color: Color(0xFF6B7280),
-          ),
-        ),
-      );
-    }
-
-    final first = prices.first.price;
-    final last = prices.last.price;
+    final first = candles.first.open;
+    final last = candles.last.close;
     final diff = last - first;
     final rate = first == 0 ? 0 : (diff / first) * 100;
     final isUp = diff >= 0;
@@ -142,7 +97,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 수정21차: 캔들차트 상단 현재가 영역
+          // 수정25차: OHLC 캔들 기준 현재가 영역
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -178,9 +133,9 @@ class _StockPriceChartState extends State<StockPriceChart> {
               ),
             ],
           ),
+
           const SizedBox(height: 12),
 
-          // 수정21차: 기간 버튼
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -275,7 +230,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
 }
 
 class _CandleChartPainter extends CustomPainter {
-  final List<_CandleItem> candles;
+  final List<StockCandleModel> candles;
   final Offset? hoverPosition;
 
   _CandleChartPainter({
@@ -327,7 +282,7 @@ class _CandleChartPainter extends CustomPainter {
       ..color = const Color(0xFFE5E7EB)
       ..strokeWidth = 1;
 
-    // 수정21차: Y축 가격 눈금
+    // 수정25차: Y축 가격 눈금
     for (int i = 0; i <= 4; i++) {
       final price = bottomPrice + (priceGap / 4) * i;
       final y = topPadding + chartHeight - (chartHeight / 4) * i;
@@ -353,14 +308,14 @@ class _CandleChartPainter extends CustomPainter {
       axisPaint,
     );
 
-    // 수정21차: X축 날짜 눈금 5개
+    // 수정25차: X축 날짜 눈금
     final tickCount = min(5, candles.length);
 
     for (int i = 0; i < tickCount; i++) {
       final ratio = tickCount == 1 ? 0.0 : i / (tickCount - 1);
       final index = ((candles.length - 1) * ratio).round();
       final x = xForIndex(index);
-      final date = candles[index].date;
+      final date = candles[index].createdAt;
 
       _drawText(
         canvas: canvas,
@@ -376,7 +331,7 @@ class _CandleChartPainter extends CustomPainter {
 
     final candleBodyWidth = candleSlotWidth.clamp(5.0, 14.0);
 
-    // 수정21차: 캔들 그리기
+    // 수정25차: OHLC 캔들 그리기
     for (int i = 0; i < candles.length; i++) {
       final candle = candles[i];
       final x = xForIndex(i);
@@ -420,7 +375,7 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawRRect(rect, bodyPaint);
     }
 
-    // 수정21차: hover 툴팁
+    // 수정25차: hover 툴팁
     if (hoverPosition != null) {
       final hoverX = hoverPosition!.dx.clamp(
         leftPadding,
@@ -471,10 +426,10 @@ class _CandleChartPainter extends CustomPainter {
     required Canvas canvas,
     required Size size,
     required Offset point,
-    required _CandleItem candle,
+    required StockCandleModel candle,
   }) {
-    const tooltipWidth = 136.0;
-    const tooltipHeight = 104.0;
+    const tooltipWidth = 142.0;
+    const tooltipHeight = 122.0;
     const tooltipGap = 12.0;
 
     double tooltipX = point.dx + tooltipGap;
@@ -507,11 +462,12 @@ class _CandleChartPainter extends CustomPainter {
     );
 
     final isUp = candle.close >= candle.open;
-    final color = isUp ? const Color(0xFFFCA5A5) : const Color(0xFF93C5FD);
+    final closeColor =
+    isUp ? const Color(0xFFFCA5A5) : const Color(0xFF93C5FD);
 
     _drawText(
       canvas: canvas,
-      text: _formatDate(candle.date),
+      text: _formatDate(candle.createdAt),
       offset: Offset(tooltipX + 10, tooltipY + 8),
       fontSize: 11,
       color: const Color(0xFFD1D5DB),
@@ -546,8 +502,16 @@ class _CandleChartPainter extends CustomPainter {
       text: '종가  ₩ ${_formatPrice(candle.close)}',
       offset: Offset(tooltipX + 10, tooltipY + 79),
       fontSize: 11,
-      color: color,
+      color: closeColor,
       fontWeight: FontWeight.w800,
+    );
+
+    _drawText(
+      canvas: canvas,
+      text: '거래량  ${_formatPrice(candle.volume)}',
+      offset: Offset(tooltipX + 10, tooltipY + 96),
+      fontSize: 11,
+      color: const Color(0xFFD1D5DB),
     );
   }
 
@@ -593,20 +557,4 @@ class _CandleChartPainter extends CustomPainter {
     return oldDelegate.candles != candles ||
         oldDelegate.hoverPosition != hoverPosition;
   }
-}
-
-class _CandleItem {
-  final DateTime date;
-  final double open;
-  final double high;
-  final double low;
-  final double close;
-
-  _CandleItem({
-    required this.date,
-    required this.open,
-    required this.high,
-    required this.low,
-    required this.close,
-  });
 }
