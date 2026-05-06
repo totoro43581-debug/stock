@@ -91,13 +91,13 @@ class _StockPriceChartState extends State<StockPriceChart> {
     final isUp = diff >= 0;
 
     return Container(
-      height: 410,
+      height: 460,
       padding: const EdgeInsets.all(16),
       decoration: _boxDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 수정25차: OHLC 캔들 기준 현재가 영역
+          // 수정26차: OHLC 캔들 + 거래량 기준 현재가 영역
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -248,7 +248,13 @@ class _CandleChartPainter extends CustomPainter {
     if (candles.isEmpty) return;
 
     final chartWidth = size.width - leftPadding - rightPadding;
-    final chartHeight = size.height - topPadding - bottomPadding;
+    final fullHeight = size.height - topPadding - bottomPadding;
+
+    // 수정26차: 메인 캔들 영역 + 거래량 영역 분리
+    final candleHeight = fullHeight * 0.74;
+    final volumeGap = 14.0;
+    final volumeHeight = fullHeight * 0.20;
+    final volumeTop = topPadding + candleHeight + volumeGap;
 
     final minPrice = candles.map((e) => e.low).reduce(min);
     final maxPrice = candles.map((e) => e.high).reduce(max);
@@ -260,10 +266,13 @@ class _CandleChartPainter extends CustomPainter {
     final topPrice = ((maxPrice / unit).ceil()) * unit;
     final priceGap = topPrice - bottomPrice == 0 ? 1 : topPrice - bottomPrice;
 
+    final maxVolume = candles.map((e) => e.volume).reduce(max);
+    final safeMaxVolume = maxVolume <= 0 ? 1 : maxVolume;
+
     double yForPrice(num price) {
       return topPadding +
-          chartHeight -
-          (((price - bottomPrice) / priceGap) * chartHeight);
+          candleHeight -
+          (((price - bottomPrice) / priceGap) * candleHeight);
     }
 
     double xForIndex(int index) {
@@ -282,10 +291,10 @@ class _CandleChartPainter extends CustomPainter {
       ..color = const Color(0xFFE5E7EB)
       ..strokeWidth = 1;
 
-    // 수정25차: Y축 가격 눈금
+    // 수정26차: Y축 가격 눈금
     for (int i = 0; i <= 4; i++) {
       final price = bottomPrice + (priceGap / 4) * i;
-      final y = topPadding + chartHeight - (chartHeight / 4) * i;
+      final y = topPadding + candleHeight - (candleHeight / 4) * i;
 
       canvas.drawLine(
         Offset(leftPadding, y),
@@ -302,13 +311,31 @@ class _CandleChartPainter extends CustomPainter {
       );
     }
 
+    // 수정26차: 캔들 영역 기준선
     canvas.drawLine(
-      Offset(leftPadding, topPadding + chartHeight),
-      Offset(leftPadding + chartWidth, topPadding + chartHeight),
+      Offset(leftPadding, topPadding + candleHeight),
+      Offset(leftPadding + chartWidth, topPadding + candleHeight),
       axisPaint,
     );
 
-    // 수정25차: X축 날짜 눈금
+    // 수정26차: 거래량 영역 상단선
+    canvas.drawLine(
+      Offset(leftPadding, volumeTop),
+      Offset(leftPadding + chartWidth, volumeTop),
+      Paint()
+        ..color = const Color(0xFFF1F5F9)
+        ..strokeWidth = 1,
+    );
+
+    _drawText(
+      canvas: canvas,
+      text: '거래량',
+      offset: Offset(leftPadding, volumeTop + 4),
+      fontSize: 10,
+      color: const Color(0xFF9CA3AF),
+    );
+
+    // 수정26차: X축 날짜 눈금
     final tickCount = min(5, candles.length);
 
     for (int i = 0; i < tickCount; i++) {
@@ -320,7 +347,7 @@ class _CandleChartPainter extends CustomPainter {
       _drawText(
         canvas: canvas,
         text: _formatDate(date),
-        offset: Offset(x - 16, topPadding + chartHeight + 12),
+        offset: Offset(x - 16, topPadding + fullHeight + 12),
         fontSize: 10,
         color: const Color(0xFF6B7280),
       );
@@ -329,9 +356,41 @@ class _CandleChartPainter extends CustomPainter {
     final candleSlotWidth =
     candles.length <= 1 ? chartWidth : chartWidth / candles.length;
 
-    final candleBodyWidth = candleSlotWidth.clamp(5.0, 14.0);
+    final candleBodyWidth = candleSlotWidth.clamp(4.0, 13.0);
+    final volumeBarWidth = candleSlotWidth.clamp(3.0, 11.0);
 
-    // 수정25차: OHLC 캔들 그리기
+    // 수정26차: 거래량 바 먼저 그리기
+    for (int i = 0; i < candles.length; i++) {
+      final candle = candles[i];
+      final x = xForIndex(i);
+
+      final isUp = candle.close >= candle.open;
+      final color = isUp
+          ? const Color(0xFFDC2626).withOpacity(0.28)
+          : const Color(0xFF2563EB).withOpacity(0.28);
+
+      final volumeRatio = candle.volume / safeMaxVolume;
+      final barHeight = max(1.0, volumeHeight * volumeRatio);
+      final barTop = volumeTop + volumeHeight - barHeight;
+
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(x, barTop + barHeight / 2),
+          width: volumeBarWidth,
+          height: barHeight,
+        ),
+        const Radius.circular(2),
+      );
+
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill,
+      );
+    }
+
+    // 수정26차: OHLC 캔들 그리기
     for (int i = 0; i < candles.length; i++) {
       final candle = candles[i];
       final x = xForIndex(i);
@@ -347,7 +406,7 @@ class _CandleChartPainter extends CustomPainter {
 
       final wickPaint = Paint()
         ..color = candleColor
-        ..strokeWidth = 1.4;
+        ..strokeWidth = 1.3;
 
       canvas.drawLine(
         Offset(x, highY),
@@ -368,14 +427,15 @@ class _CandleChartPainter extends CustomPainter {
         const Radius.circular(2),
       );
 
-      final bodyPaint = Paint()
-        ..color = candleColor
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRRect(rect, bodyPaint);
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = candleColor
+          ..style = PaintingStyle.fill,
+      );
     }
 
-    // 수정25차: hover 툴팁
+    // 수정26차: hover 툴팁 + 선택 캔들/거래량 강조
     if (hoverPosition != null) {
       final hoverX = hoverPosition!.dx.clamp(
         leftPadding,
@@ -403,7 +463,7 @@ class _CandleChartPainter extends CustomPainter {
 
       canvas.drawLine(
         Offset(x, topPadding),
-        Offset(x, topPadding + chartHeight),
+        Offset(x, volumeTop + volumeHeight),
         hoverLinePaint,
       );
 
@@ -411,6 +471,26 @@ class _CandleChartPainter extends CustomPainter {
         Offset(x, selectedY),
         5,
         Paint()..color = candleColor,
+      );
+
+      final volumeRatio = candle.volume / safeMaxVolume;
+      final barHeight = max(1.0, volumeHeight * volumeRatio);
+      final barTop = volumeTop + volumeHeight - barHeight;
+
+      final highlightRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(x, barTop + barHeight / 2),
+          width: volumeBarWidth + 3,
+          height: barHeight,
+        ),
+        const Radius.circular(2),
+      );
+
+      canvas.drawRRect(
+        highlightRect,
+        Paint()
+          ..color = candleColor.withOpacity(0.55)
+          ..style = PaintingStyle.fill,
       );
 
       _drawTooltip(
