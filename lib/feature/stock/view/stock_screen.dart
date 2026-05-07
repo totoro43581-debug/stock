@@ -41,6 +41,8 @@ class _StockScreenState extends State<StockScreen> {
   // 수정20차: DB 기반 실시간 가격 자동 갱신 타이머
   Timer? _realtimePriceTimer;
   bool _isRealtimeUpdating = false;
+  // 수정27차: 마지막 실시간 갱신 시간
+  DateTime? _lastRealtimeUpdatedAt;
 
   final Random _random = Random();
 
@@ -160,6 +162,12 @@ class _StockScreenState extends State<StockScreen> {
           _isRealtimeUpdating = true;
 
           await _stockPriceRepository.simulateStockPrices();
+
+          if (mounted) {
+            setState(() {
+              _lastRealtimeUpdatedAt = DateTime.now();
+            });
+          }
 
           await _loadMarketItems();
 
@@ -646,6 +654,12 @@ class _StockScreenState extends State<StockScreen> {
                     const SizedBox(height: _sectionGap),
                     _buildLoginNoticeSection(),
                     const SizedBox(height: _sectionGap),
+                    _buildLoginNoticeSection(),
+                    const SizedBox(height: _sectionGap),
+
+                    _buildTradingDashboardSection(),
+                    const SizedBox(height: _sectionGap),
+
                     _buildFilterSection(),
                     const SizedBox(height: _sectionGap),
                     if (isWide)
@@ -672,8 +686,6 @@ class _StockScreenState extends State<StockScreen> {
                                 _buildDetailSection(),
                                 const SizedBox(height: _sectionGap),
                                 _buildTradeSection(),
-                                const SizedBox(height: _sectionGap),
-                                _buildChartPlaceholderSection(),
                               ],
                             ),
                           ),
@@ -685,11 +697,7 @@ class _StockScreenState extends State<StockScreen> {
                         children: [
                           _buildStockListSection(filteredItems),
                           const SizedBox(height: _sectionGap),
-                          _buildDetailSection(),
-                          const SizedBox(height: _sectionGap),
-                          _buildTradeSection(),
-                          const SizedBox(height: _sectionGap),
-                          _buildChartPlaceholderSection(),
+
                           const SizedBox(height: _sectionGap),
                           _buildTradeHistorySection(),
                         ],
@@ -1687,6 +1695,74 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  // 수정27차: 실시간 갱신 배지
+  Widget _buildRealtimeBadge() {
+    final String timeText = _lastRealtimeUpdatedAt == null
+        ? '대기 중'
+        : '${_lastRealtimeUpdatedAt!.hour.toString().padLeft(2, '0')}:'
+        '${_lastRealtimeUpdatedAt!.minute.toString().padLeft(2, '0')}:'
+        '${_lastRealtimeUpdatedAt!.second.toString().padLeft(2, '0')}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: Color(0xFF16A34A),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '실시간 · 30초 갱신 · $timeText',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF374151),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 수정32차: 차트 + 상세 + 매매 통합 레이아웃 높이 고정
+  Widget _buildTradingDashboardSection() {
+    return SizedBox(
+      height: 700,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _buildChartPlaceholderSection(),
+          ),
+          const SizedBox(width: 18),
+          SizedBox(
+            width: 360,
+            child: Column(
+              children: [
+                Expanded(
+                  child: _buildDetailSection(),
+                ),
+                const SizedBox(height: 16),
+                _buildTradeSection(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 수정14차: 차트 영역 실제 라인 차트 연결
   Widget _buildChartPlaceholderSection() {
     return Container(
@@ -1696,13 +1772,20 @@ class _StockScreenState extends State<StockScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _selectedStockName == null ? '차트 영역' : '$_selectedStockName 차트',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _selectedStockName == null ? '차트 영역' : '$_selectedStockName 차트',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              _buildRealtimeBadge(),
+            ],
           ),
           const SizedBox(height: 14),
           if (_isChartLoading)

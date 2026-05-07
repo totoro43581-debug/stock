@@ -91,13 +91,13 @@ class _StockPriceChartState extends State<StockPriceChart> {
     final isUp = diff >= 0;
 
     return Container(
-      height: 460,
+      height: 500,
       padding: const EdgeInsets.all(16),
       decoration: _boxDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 수정26차: OHLC 캔들 + 거래량 기준 현재가 영역
+          // 수정28차: OHLC 캔들 + 거래량 + 이동평균선 기준 현재가 영역
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -185,7 +185,24 @@ class _StockPriceChartState extends State<StockPriceChart> {
             ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+
+          // 수정28차: 이동평균선 범례
+          Row(
+            children: [
+              _buildLegendDot(
+                label: 'MA5',
+                color: const Color(0xFFF59E0B),
+              ),
+              const SizedBox(width: 12),
+              _buildLegendDot(
+                label: 'MA20',
+                color: const Color(0xFF8B5CF6),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
 
           Expanded(
             child: MouseRegion(
@@ -210,6 +227,34 @@ class _StockPriceChartState extends State<StockPriceChart> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLegendDot({
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 18,
+          height: 3,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF6B7280),
+          ),
+        ),
+      ],
     );
   }
 
@@ -250,14 +295,23 @@ class _CandleChartPainter extends CustomPainter {
     final chartWidth = size.width - leftPadding - rightPadding;
     final fullHeight = size.height - topPadding - bottomPadding;
 
-    // 수정26차: 메인 캔들 영역 + 거래량 영역 분리
     final candleHeight = fullHeight * 0.74;
     final volumeGap = 14.0;
     final volumeHeight = fullHeight * 0.20;
     final volumeTop = topPadding + candleHeight + volumeGap;
 
-    final minPrice = candles.map((e) => e.low).reduce(min);
-    final maxPrice = candles.map((e) => e.high).reduce(max);
+    final ma5 = _movingAverage(5);
+    final ma20 = _movingAverage(20);
+
+    final priceValues = <double>[
+      ...candles.map((e) => e.low),
+      ...candles.map((e) => e.high),
+      ...ma5.whereType<double>(),
+      ...ma20.whereType<double>(),
+    ];
+
+    final minPrice = priceValues.reduce(min);
+    final maxPrice = priceValues.reduce(max);
 
     final priceGapRaw = maxPrice - minPrice == 0 ? 1 : maxPrice - minPrice;
     final unit = max(100, ((priceGapRaw / 4 / 100).ceil()) * 100);
@@ -291,7 +345,7 @@ class _CandleChartPainter extends CustomPainter {
       ..color = const Color(0xFFE5E7EB)
       ..strokeWidth = 1;
 
-    // 수정26차: Y축 가격 눈금
+    // 수정28차: Y축 가격 눈금
     for (int i = 0; i <= 4; i++) {
       final price = bottomPrice + (priceGap / 4) * i;
       final y = topPadding + candleHeight - (candleHeight / 4) * i;
@@ -311,14 +365,12 @@ class _CandleChartPainter extends CustomPainter {
       );
     }
 
-    // 수정26차: 캔들 영역 기준선
     canvas.drawLine(
       Offset(leftPadding, topPadding + candleHeight),
       Offset(leftPadding + chartWidth, topPadding + candleHeight),
       axisPaint,
     );
 
-    // 수정26차: 거래량 영역 상단선
     canvas.drawLine(
       Offset(leftPadding, volumeTop),
       Offset(leftPadding + chartWidth, volumeTop),
@@ -335,7 +387,7 @@ class _CandleChartPainter extends CustomPainter {
       color: const Color(0xFF9CA3AF),
     );
 
-    // 수정26차: X축 날짜 눈금
+    // 수정28차: X축 날짜 눈금
     final tickCount = min(5, candles.length);
 
     for (int i = 0; i < tickCount; i++) {
@@ -359,7 +411,7 @@ class _CandleChartPainter extends CustomPainter {
     final candleBodyWidth = candleSlotWidth.clamp(4.0, 13.0);
     final volumeBarWidth = candleSlotWidth.clamp(3.0, 11.0);
 
-    // 수정26차: 거래량 바 먼저 그리기
+    // 수정28차: 거래량 바
     for (int i = 0; i < candles.length; i++) {
       final candle = candles[i];
       final x = xForIndex(i);
@@ -390,7 +442,7 @@ class _CandleChartPainter extends CustomPainter {
       );
     }
 
-    // 수정26차: OHLC 캔들 그리기
+    // 수정28차: OHLC 캔들
     for (int i = 0; i < candles.length; i++) {
       final candle = candles[i];
       final x = xForIndex(i);
@@ -435,7 +487,24 @@ class _CandleChartPainter extends CustomPainter {
       );
     }
 
-    // 수정26차: hover 툴팁 + 선택 캔들/거래량 강조
+    // 수정28차: 이동평균선은 캔들 위에 표시
+    _drawMovingAverageLine(
+      canvas: canvas,
+      values: ma5,
+      color: const Color(0xFFF59E0B),
+      yForPrice: yForPrice,
+      xForIndex: xForIndex,
+    );
+
+    _drawMovingAverageLine(
+      canvas: canvas,
+      values: ma20,
+      color: const Color(0xFF8B5CF6),
+      yForPrice: yForPrice,
+      xForIndex: xForIndex,
+    );
+
+    // 수정28차: hover 툴팁 + 선택 강조
     if (hoverPosition != null) {
       final hoverX = hoverPosition!.dx.clamp(
         leftPadding,
@@ -498,8 +567,69 @@ class _CandleChartPainter extends CustomPainter {
         size: size,
         point: Offset(x, selectedY),
         candle: candle,
+        ma5: ma5[index],
+        ma20: ma20[index],
       );
     }
+  }
+
+  List<double?> _movingAverage(int period) {
+    final result = <double?>[];
+
+    for (int i = 0; i < candles.length; i++) {
+      if (i + 1 < period) {
+        result.add(null);
+        continue;
+      }
+
+      double sum = 0;
+
+      for (int j = i - period + 1; j <= i; j++) {
+        sum += candles[j].close;
+      }
+
+      result.add(sum / period);
+    }
+
+    return result;
+  }
+
+  void _drawMovingAverageLine({
+    required Canvas canvas,
+    required List<double?> values,
+    required Color color,
+    required double Function(num price) yForPrice,
+    required double Function(int index) xForIndex,
+  }) {
+    final path = Path();
+    bool started = false;
+
+    for (int i = 0; i < values.length; i++) {
+      final value = values[i];
+      if (value == null) continue;
+
+      final x = xForIndex(i);
+      final y = yForPrice(value);
+
+      if (!started) {
+        path.moveTo(x, y);
+        started = true;
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    if (!started) return;
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 1.8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
   }
 
   void _drawTooltip({
@@ -507,9 +637,11 @@ class _CandleChartPainter extends CustomPainter {
     required Size size,
     required Offset point,
     required StockCandleModel candle,
+    required double? ma5,
+    required double? ma20,
   }) {
-    const tooltipWidth = 142.0;
-    const tooltipHeight = 122.0;
+    const tooltipWidth = 154.0;
+    const tooltipHeight = 156.0;
     const tooltipGap = 12.0;
 
     double tooltipX = point.dx + tooltipGap;
@@ -592,6 +724,24 @@ class _CandleChartPainter extends CustomPainter {
       offset: Offset(tooltipX + 10, tooltipY + 96),
       fontSize: 11,
       color: const Color(0xFFD1D5DB),
+    );
+
+    _drawText(
+      canvas: canvas,
+      text: 'MA5   ${ma5 == null ? '-' : '₩ ${_formatPrice(ma5)}'}',
+      offset: Offset(tooltipX + 10, tooltipY + 116),
+      fontSize: 11,
+      color: const Color(0xFFF59E0B),
+      fontWeight: FontWeight.w800,
+    );
+
+    _drawText(
+      canvas: canvas,
+      text: 'MA20  ${ma20 == null ? '-' : '₩ ${_formatPrice(ma20)}'}',
+      offset: Offset(tooltipX + 10, tooltipY + 133),
+      fontSize: 11,
+      color: const Color(0xFF8B5CF6),
+      fontWeight: FontWeight.w800,
     );
   }
 
