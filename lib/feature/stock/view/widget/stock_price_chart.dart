@@ -91,7 +91,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
     final isUp = diff >= 0;
 
     return Container(
-      height: 500,
+      height: 560,
       padding: const EdgeInsets.all(16),
       decoration: _boxDecoration(),
       child: Column(

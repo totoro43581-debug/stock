@@ -648,20 +648,24 @@ class _StockScreenState extends State<StockScreen> {
                   children: [
                     _buildHeader(),
                     const SizedBox(height: _sectionGap),
+
                     _buildCategoryTabSection(),
                     const SizedBox(height: _sectionGap),
+
                     _buildSummarySection(),
                     const SizedBox(height: _sectionGap),
-                    _buildLoginNoticeSection(),
-                    const SizedBox(height: _sectionGap),
+
                     _buildLoginNoticeSection(),
                     const SizedBox(height: _sectionGap),
 
-                    _buildTradingDashboardSection(),
+                    // 수정35차: 상단은 차트만 전체폭으로 표시
+                    _buildChartPlaceholderSection(),
                     const SizedBox(height: _sectionGap),
 
+                    // 수정35차: 필터는 차트 아래 1번만 표시
                     _buildFilterSection(),
                     const SizedBox(height: _sectionGap),
+
                     if (isWide)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -697,7 +701,9 @@ class _StockScreenState extends State<StockScreen> {
                         children: [
                           _buildStockListSection(filteredItems),
                           const SizedBox(height: _sectionGap),
-
+                          _buildDetailSection(),
+                          const SizedBox(height: _sectionGap),
+                          _buildTradeSection(),
                           const SizedBox(height: _sectionGap),
                           _buildTradeHistorySection(),
                         ],
@@ -711,8 +717,6 @@ class _StockScreenState extends State<StockScreen> {
                           _buildDetailSection(),
                           const SizedBox(height: 16),
                           _buildTradeSection(),
-                          const SizedBox(height: 16),
-                          _buildChartPlaceholderSection(),
                           const SizedBox(height: 16),
                           _buildTradeHistorySection(),
                         ],
@@ -1495,23 +1499,6 @@ class _StockScreenState extends State<StockScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: Text(
-              item.description.isEmpty ? '종목 설명 데이터가 없습니다.' : item.description,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.6,
-                color: Color(0xFF374151),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1728,34 +1715,6 @@ class _StockScreenState extends State<StockScreen> {
               fontSize: 12,
               fontWeight: FontWeight.w800,
               color: Color(0xFF374151),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 수정32차: 차트 + 상세 + 매매 통합 레이아웃 높이 고정
-  Widget _buildTradingDashboardSection() {
-    return SizedBox(
-      height: 700,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _buildChartPlaceholderSection(),
-          ),
-          const SizedBox(width: 18),
-          SizedBox(
-            width: 360,
-            child: Column(
-              children: [
-                Expanded(
-                  child: _buildDetailSection(),
-                ),
-                const SizedBox(height: 16),
-                _buildTradeSection(),
-              ],
             ),
           ),
         ],

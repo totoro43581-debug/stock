@@ -111,8 +111,20 @@ class StockTradeRepository {
       cashBalance: wallet.cashBalance - totalAmount,
     );
 
+    // 수정41차: stock_item_id 포함해서 거래 저장
+    final stockItem = await _client
+        .from('stock_item')
+        .select('id')
+        .eq('code', stockCode)
+        .maybeSingle();
+
+    if (stockItem == null) {
+      throw Exception('종목 정보를 찾을 수 없습니다.');
+    }
+
     await _client.from('stock_trade_history').insert({
       'user_id': userId,
+      'stock_item_id': stockItem['id'],   // 🔥 핵심
       'stock_code': stockCode,
       'stock_name': stockName,
       'trade_type': 'buy',
@@ -195,14 +207,25 @@ class StockTradeRepository {
       cashBalance: wallet.cashBalance + totalAmount,
     );
 
+    final stockItem = await _client
+        .from('stock_item')
+        .select('id')
+        .eq('code', stockCode)
+        .maybeSingle();
+
+    if (stockItem == null) {
+      throw Exception('종목 정보를 찾을 수 없습니다.');
+    }
+
     await _client.from('stock_trade_history').insert({
       'user_id': userId,
+      'stock_item_id': stockItem['id'],
       'stock_code': stockCode,
       'stock_name': stockName,
       'trade_type': 'sell',
       'quantity': quantity,
       'price': price,
-      'total_amount': totalAmount,
+      'total_amount': price * quantity,
     });
   }
 }
