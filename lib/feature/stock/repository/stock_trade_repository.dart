@@ -61,8 +61,7 @@ class StockTradeRepository {
     }
 
     final double rawAmount = price * quantity;
-    final double fee = rawAmount * 0.0015;
-    final int totalAmount = (rawAmount - fee).round();
+    final int totalAmount = rawAmount.round();
     final WalletModel wallet = await _walletRepository.ensureWallet(userId);
 
     if (wallet.cashBalance < totalAmount) {
@@ -182,7 +181,7 @@ class StockTradeRepository {
 
     final double rawAmount = price * quantity;
     final double fee = rawAmount * 0.0015;
-    final int totalAmount = (rawAmount + fee).round();
+    final int totalAmount = (rawAmount - fee).round();
 
     final WalletModel wallet = await _walletRepository.ensureWallet(userId);
 

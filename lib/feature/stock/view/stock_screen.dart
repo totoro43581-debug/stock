@@ -639,8 +639,7 @@ class _StockScreenState extends State<StockScreen> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 820, // 수정37차: 종목 목록 카드 폭 고정
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -651,7 +650,8 @@ class _StockScreenState extends State<StockScreen> {
                             ),
                           ),
                           const SizedBox(width: _sectionGap),
-                          Expanded(
+                          SizedBox(
+                            width: 430,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -661,19 +661,6 @@ class _StockScreenState extends State<StockScreen> {
                               ],
                             ),
                           ),
-                        ],
-                      )
-                    else if (isTablet)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildStockListSection(filteredItems),
-                          const SizedBox(height: _sectionGap),
-                          _buildDetailSection(),
-                          const SizedBox(height: _sectionGap),
-                          _buildTradeSection(),
-                          const SizedBox(height: _sectionGap),
-                          _buildTradeHistorySection(),
                         ],
                       )
                     else
@@ -1126,8 +1113,8 @@ class _StockScreenState extends State<StockScreen> {
   Widget _buildStockListSection(List<_StockItem> items) {
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 320),
-      padding: const EdgeInsets.all(18),
+      constraints: const BoxConstraints(minHeight: 260),
+      padding: const EdgeInsets.all(12),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1135,40 +1122,38 @@ class _StockScreenState extends State<StockScreen> {
           const Text(
             '종목 목록',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           if (items.isEmpty)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 72),
+              padding: const EdgeInsets.symmetric(vertical: 52),
               alignment: Alignment.center,
               child: Text(
                 _isLoggedIn
                     ? '조건에 맞는 종목이 없습니다.'
                     : '종목 데이터가 없거나 필터 조건에 맞는 결과가 없습니다.',
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   color: Color(0xFF6B7280),
                 ),
                 textAlign: TextAlign.center,
               ),
             )
           else
-    Align(
-    alignment: Alignment.centerLeft,
-    child: ClipRRect(
-    borderRadius: BorderRadius.circular(14),
-    child: Table(
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Table(
                 columnWidths: const {
-                  0: FixedColumnWidth(230),
-                  1: FixedColumnWidth(140),
-                  2: FixedColumnWidth(110),
-                  3: FixedColumnWidth(110),
-                  4: FixedColumnWidth(140),
+                  0: FlexColumnWidth(2.2),
+                  1: FlexColumnWidth(1.2),
+                  2: FlexColumnWidth(1.0),
+                  3: FlexColumnWidth(1.0),
+                  4: FlexColumnWidth(1.2),
                 },
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                 children: [
@@ -1176,7 +1161,6 @@ class _StockScreenState extends State<StockScreen> {
                   for (final item in items) _buildStockTableRow(item),
                 ],
               ),
-    ),
             ),
         ],
       ),
@@ -1184,6 +1168,13 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   TableRow _buildStockTableHeader() {
+    const TextStyle headerStyle = TextStyle(
+      fontSize: 11,
+      height: 1.0,
+      fontWeight: FontWeight.w800,
+      color: Color(0xFF64748B),
+    );
+
     return const TableRow(
       decoration: BoxDecoration(
         color: Color(0xFFF8FAFC),
@@ -1193,63 +1184,24 @@ class _StockScreenState extends State<StockScreen> {
       ),
       children: [
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          child: Text(
-            '종목',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF64748B),
-            ),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Text('종목', style: headerStyle),
         ),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-          child: Text(
-            '현재가',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF64748B),
-            ),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          child: Text('현재가', textAlign: TextAlign.right, style: headerStyle),
         ),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-          child: Text(
-            '등락률',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF64748B),
-            ),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          child: Text('등락률', textAlign: TextAlign.right, style: headerStyle),
         ),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-          child: Text(
-            '보유수량',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF64748B),
-            ),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          child: Text('보유수량', textAlign: TextAlign.right, style: headerStyle),
         ),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Text(
-            '평가손익',
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF64748B),
-            ),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Text('평가손익', textAlign: TextAlign.right, style: headerStyle),
         ),
       ],
     );
@@ -1273,18 +1225,18 @@ class _StockScreenState extends State<StockScreen> {
       children: [
         _buildStockTableCell(
           item: item,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
               Container(
-                width: 8,
-                height: 8,
+                width: 7,
+                height: 7,
                 decoration: BoxDecoration(
                   color: _changeColor(item.changeRate),
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1294,7 +1246,8 @@ class _StockScreenState extends State<StockScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
+                        height: 1.05,
                         fontWeight: FontWeight.w800,
                         color: Color(0xFF111827),
                       ),
@@ -1305,7 +1258,8 @@ class _StockScreenState extends State<StockScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 10,
+                        height: 1.0,
                         color: Color(0xFF94A3B8),
                       ),
                     ),
@@ -1317,13 +1271,15 @@ class _StockScreenState extends State<StockScreen> {
         ),
         _buildStockTableCell(
           item: item,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 11),
           child: Text(
             '₩ ${_formatPrice(item.currentPrice)}',
             textAlign: TextAlign.right,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 12,
+              height: 1.0,
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827),
             ),
@@ -1331,13 +1287,15 @@ class _StockScreenState extends State<StockScreen> {
         ),
         _buildStockTableCell(
           item: item,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 11),
           child: Text(
             _formatSignedPercent(item.changeRate),
             textAlign: TextAlign.right,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 12,
+              height: 1.0,
               fontWeight: FontWeight.w800,
               color: _changeColor(item.changeRate),
             ),
@@ -1345,13 +1303,15 @@ class _StockScreenState extends State<StockScreen> {
         ),
         _buildStockTableCell(
           item: item,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 11),
           child: Text(
             '$holdingQuantity주',
             textAlign: TextAlign.right,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 12,
+              height: 1.0,
               fontWeight: FontWeight.w700,
               color: Color(0xFF334155),
             ),
@@ -1359,7 +1319,7 @@ class _StockScreenState extends State<StockScreen> {
         ),
         _buildStockTableCell(
           item: item,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
           child: Text(
             '${_formatSignedPrice(profitAmount)}원',
             textAlign: TextAlign.right,
@@ -1367,6 +1327,7 @@ class _StockScreenState extends State<StockScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 12,
+              height: 1.0,
               fontWeight: FontWeight.w800,
               color: _changeColor(profitAmount),
             ),
@@ -1400,34 +1361,30 @@ class _StockScreenState extends State<StockScreen> {
     if (_selectedMarketItem == null) {
       return Container(
         width: double.infinity,
-        constraints: const BoxConstraints(minHeight: 118),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        padding: const EdgeInsets.all(14), // 🔥 줄임
         decoration: _cardDecoration(),
         child: const Center(
           child: Text(
             '선택된 종목이 없습니다.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF6B7280),
-            ),
+            style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
           ),
         ),
       );
     }
 
     final item = _selectedMarketItem!;
-    final StockHoldingModel? holding = _findHoldingByCode(item.code);
-    final int holdingQuantity = holding?.quantity ?? 0;
-    final double averagePrice = holding?.averagePrice ?? 0;
-    final double evaluatedAmount = item.currentPrice * holdingQuantity;
-    final double profitAmount = holding == null
+    final holding = _findHoldingByCode(item.code);
+
+    final int qty = holding?.quantity ?? 0;
+    final double avg = holding?.averagePrice ?? 0;
+    final double eval = item.currentPrice * qty;
+    final double profit = holding == null
         ? 0
         : (item.currentPrice - holding.averagePrice) * holding.quantity;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(_cardPadding),
+      padding: const EdgeInsets.all(14), // 🔥 핵심
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1435,39 +1392,41 @@ class _StockScreenState extends State<StockScreen> {
           const Text(
             '선택 종목 상세',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 16, // 🔥 줄임
               fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 10),
+
           Text(
             item.name,
             style: const TextStyle(
-              fontSize: 24,
+              fontSize: 18, // 🔥 줄임
               fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
+
           Text(
             '${item.code} · ${item.market}',
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 11,
               color: Color(0xFF9CA3AF),
             ),
           ),
-          const SizedBox(height: 18),
+
+          const SizedBox(height: 12),
+
           Row(
             children: [
               Expanded(
                 child: _buildDetailMetric(
                   title: '현재가',
                   value: '₩ ${_formatPrice(item.currentPrice)}',
-                  valueColor: const Color(0xFF111827),
+                  valueColor: Colors.black,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildDetailMetric(
                   title: '등락률',
@@ -1477,48 +1436,50 @@ class _StockScreenState extends State<StockScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 8),
+
           Row(
             children: [
               Expanded(
                 child: _buildDetailMetric(
                   title: '보유수량',
-                  value: '$holdingQuantity주',
-                  valueColor: const Color(0xFF111827),
+                  value: '$qty주',
+                  valueColor: Colors.black,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildDetailMetric(
                   title: '평균단가',
-                  value:
-                  holding == null ? '-' : '₩ ${_formatPrice(averagePrice)}',
-                  valueColor: const Color(0xFF111827),
+                  value: qty == 0 ? '-' : '₩ ${_formatPrice(avg)}',
+                  valueColor: Colors.black,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 8),
+
           Row(
             children: [
               Expanded(
                 child: _buildDetailMetric(
                   title: '평가금액',
-                  value: '₩ ${_formatPrice(evaluatedAmount)}',
-                  valueColor: const Color(0xFF111827),
+                  value: '₩ ${_formatPrice(eval)}',
+                  valueColor: Colors.black,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildDetailMetric(
                   title: '평가손익',
-                  value: '${_formatSignedPrice(profitAmount)}원',
-                  valueColor: _changeColor(profitAmount),
+                  value: '${_formatSignedPrice(profit)}원',
+                  valueColor: _changeColor(profit),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -1530,10 +1491,10 @@ class _StockScreenState extends State<StockScreen> {
     required Color valueColor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10), // 🔥 줄임
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
@@ -1542,18 +1503,18 @@ class _StockScreenState extends State<StockScreen> {
           Text(
             title,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 10, // 🔥 줄임
               fontWeight: FontWeight.w700,
               color: Color(0xFF6B7280),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 14, // 🔥 핵심
               fontWeight: FontWeight.w800,
               color: valueColor,
             ),
@@ -1566,7 +1527,7 @@ class _StockScreenState extends State<StockScreen> {
   Widget _buildTradeSection() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(_cardPadding),
+      padding: const EdgeInsets.all(14), // 🔥 줄임
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1574,45 +1535,34 @@ class _StockScreenState extends State<StockScreen> {
           const Text(
             '매수 / 매도',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 16, // 🔥 줄임
               fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+
           TextField(
             controller: _quantityController,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
               labelText: '수량',
-              hintText: '주문 수량 입력',
-              filled: true,
-              fillColor: Colors.white,
+              isDense: true, // 🔥 핵심
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 14,
+                horizontal: 12,
+                vertical: 10,
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFF2563EB)),
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
           ),
-          const SizedBox(height: 14),
+
+          const SizedBox(height: 10),
+
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
             child: _selectedMarketItem == null
@@ -1621,77 +1571,55 @@ class _StockScreenState extends State<StockScreen> {
               builder: (_) {
                 final int qty =
                     int.tryParse(_quantityController.text) ?? 0;
-
                 final double price = _selectedMarketItem!.currentPrice;
 
                 final int total = (price * qty).round();
-
                 final int afterCash = (_cash - total).round();
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('현재가: ₩ ${_formatPrice(price)}'),
-                    Text('수량: $qty주'),
-                    const SizedBox(height: 8),
-                    Text('결제금액: ₩ ${_formatPrice(total)}'),
-                    Text('매수 후 현금: ₩ ${_formatPrice(afterCash)}'),
+                    Text('현재가: ₩ ${_formatPrice(price)}',
+                        style: const TextStyle(fontSize: 12)),
+                    Text('수량: $qty주',
+                        style: const TextStyle(fontSize: 12)),
+                    const SizedBox(height: 6),
+                    Text('결제금액: ₩ ${_formatPrice(total)}',
+                        style: const TextStyle(fontSize: 12)),
+                    Text('매수 후 현금: ₩ ${_formatPrice(afterCash)}',
+                        style: const TextStyle(fontSize: 12)),
                   ],
                 );
               },
             ),
           ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 12),
+
           Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 52,
+                  height: 44, // 🔥 줄임
                   child: ElevatedButton(
-                    onPressed: _isLoggedIn && !_isTrading ? _handleBuy : null,
+                    onPressed: _handleBuy,
                     style: ElevatedButton.styleFrom(
-                      elevation: 0,
                       backgroundColor: const Color(0xFF16A34A),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFE5E7EB),
-                      disabledForegroundColor: const Color(0xFF9CA3AF),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
                     ),
-                    child: Text(
-                      _isTrading ? '처리 중' : '매수',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                    child: const Text('매수', style: TextStyle(fontSize: 13)),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: SizedBox(
-                  height: 52,
+                  height: 44, // 🔥 줄임
                   child: ElevatedButton(
-                    onPressed: _isLoggedIn && !_isTrading ? _handleSell : null,
+                    onPressed: _handleSell,
                     style: ElevatedButton.styleFrom(
-                      elevation: 0,
                       backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFE5E7EB),
-                      disabledForegroundColor: const Color(0xFF9CA3AF),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
                     ),
-                    child: Text(
-                      _isTrading ? '처리 중' : '매도',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                    child: const Text('매도', style: TextStyle(fontSize: 13)),
                   ),
                 ),
               ),
