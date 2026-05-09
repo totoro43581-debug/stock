@@ -5,10 +5,12 @@ import 'package:stock/feature/stock/model/stock_candle_model.dart';
 
 class StockPriceChart extends StatefulWidget {
   final List<StockCandleModel> prices;
+  final double currentPrice;
 
   const StockPriceChart({
     super.key,
     required this.prices,
+    required this.currentPrice,
   });
 
   @override
@@ -85,9 +87,13 @@ class _StockPriceChartState extends State<StockPriceChart> {
     }
 
     final first = candles.first.open;
-    final last = candles.last.close;
+    final last = widget.currentPrice;
+
     final diff = last - first;
-    final rate = first == 0 ? 0 : (diff / first) * 100;
+
+    final rate = first == 0
+        ? 0
+        : (diff / first) * 100;
     final isUp = diff >= 0;
 
     return Container(

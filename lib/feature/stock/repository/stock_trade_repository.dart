@@ -62,9 +62,15 @@ class StockTradeRepository {
 
     final double rawAmount = price * quantity;
     final int totalAmount = rawAmount.round();
-    final WalletModel wallet = await _walletRepository.ensureWallet(userId);
 
-    if (wallet.cashBalance < totalAmount) {
+    final WalletModel? latestWallet =
+    await _walletRepository.fetchWallet(userId);
+
+    if (latestWallet == null) {
+      throw Exception('지갑 정보를 찾을 수 없습니다.');
+    }
+
+    if (latestWallet.cashBalance < totalAmount) {
       throw Exception('보유 현금이 부족합니다.');
     }
 
@@ -107,7 +113,7 @@ class StockTradeRepository {
 
     await _walletRepository.updateCashBalance(
       userId: userId,
-      cashBalance: wallet.cashBalance - totalAmount,
+      cashBalance: latestWallet.cashBalance - totalAmount,
     );
 
     // 수정41차: stock_item_id 포함해서 거래 저장
@@ -183,7 +189,12 @@ class StockTradeRepository {
     final double fee = rawAmount * 0.0015;
     final int totalAmount = (rawAmount - fee).round();
 
-    final WalletModel wallet = await _walletRepository.ensureWallet(userId);
+    final WalletModel? latestWallet =
+    await _walletRepository.fetchWallet(userId);
+
+    if (latestWallet == null) {
+      throw Exception('지갑 정보를 찾을 수 없습니다.');
+    }
 
     final int remainQuantity = currentQuantity - quantity;
 
@@ -203,7 +214,7 @@ class StockTradeRepository {
 
     await _walletRepository.updateCashBalance(
       userId: userId,
-      cashBalance: wallet.cashBalance + totalAmount,
+      cashBalance: latestWallet.cashBalance + totalAmount,
     );
 
     final stockItem = await _client

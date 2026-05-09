@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
+import 'package:stock/feature/stock/model/stock_candle_model.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
 import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
 import 'package:stock/feature/stock/repository/stock_price_repository.dart';
@@ -14,7 +15,6 @@ import 'package:stock/feature/stock/view/stock_register_screen.dart';
 import 'package:stock/feature/stock/view/widget/stock_price_chart.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
-import 'package:stock/feature/stock/model/stock_candle_model.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -24,44 +24,42 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
+  final StockRepository _stockRepository = StockRepository();
+  final StockTradeRepository _stockTradeRepository = StockTradeRepository();
   final StockPriceRepository _stockPriceRepository = StockPriceRepository();
-
-  List<StockCandleModel> _selectedStockPrices = [];
-  bool _isChartLoading = false;
-  String? _selectedStockId;
-  String? _selectedStockName;
-
-  final List<double> _priceHistory = [];
-
-  Timer? _priceTimer;
-  Timer? _realtimePriceTimer;
-  bool _isRealtimeUpdating = false;
-  DateTime? _lastRealtimeUpdatedAt;
-
-  final Random _random = Random();
+  final WalletRepository _walletRepository = WalletRepository();
 
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _quantityController =
   TextEditingController(text: '1');
 
-  String _selectedCategoryTab = '전체';
-  String _selectedMarketFilter = '전체';
-  String _selectedSort = '이름';
-  bool _showOnlyOwned = false;
+  Timer? _realtimePriceTimer;
 
-  final StockRepository _stockRepository = StockRepository();
-  final StockTradeRepository _stockTradeRepository = StockTradeRepository();
-  final WalletRepository _walletRepository = WalletRepository();
-
-  WalletModel? _wallet;
+  bool _isRealtimeUpdating = false;
   bool _isWalletLoading = false;
   bool _isTrading = false;
+  bool _showOnlyOwned = false;
+  bool _isBuyOrder = true;
+  bool _isChartLoading = false;
+
+  DateTime? _lastRealtimeUpdatedAt;
+
+  WalletModel? _wallet;
 
   List<_StockItem> _marketItems = [];
   List<StockHoldingModel> _holdingItems = [];
   List<StockTradeHistoryModel> _tradeHistoryItems = [];
+  List<StockCandleModel> _selectedStockPrices = [];
 
   _StockItem? _selectedMarketItem;
+  double? _selectedOrderPrice;
+
+  String _selectedCategoryTab = '전체';
+  String _selectedMarketFilter = '전체';
+  String _selectedSort = '이름';
+
+  int _tradeHistoryPage = 0;
+  static const int _tradeHistoryPageSize = 5;
 
   SupabaseClient get _supabase => Supabase.instance.client;
   Session? get _session => _supabase.auth.currentSession;
@@ -69,20 +67,17 @@ class _StockScreenState extends State<StockScreen> {
 
   bool get _isLoggedIn => _session != null && _user != null;
 
-  static const double _pageMaxWidth = 1400;
-  static const double _sectionGap = 20;
-  static const double _cardRadius = 20;
-  static const double _cardPadding = 20;
-  static const double _summaryCardMinHeight = 150;
+  static const double _pageMaxWidth = 1480;
+  static const double _gap = 14;
+  static const double _radius = 18;
 
   @override
   void initState() {
     super.initState();
+
     _completeOpenMarketQuest();
     _loadInitialData();
     _startRealtimePriceUpdate();
-
-    //_startPriceSimulation();
 
     _quantityController.addListener(() {
       if (mounted) setState(() {});
@@ -93,54 +88,28 @@ class _StockScreenState extends State<StockScreen> {
   void dispose() {
     _searchController.dispose();
     _quantityController.dispose();
-    _priceTimer?.cancel();
     _realtimePriceTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadStockChart(String stockId, String stockName) async {
-    setState(() {
-      _isChartLoading = true;
-      _selectedStockId = stockId;
-      _selectedStockName = stockName;
-    });
-
+  Future<void> _completeOpenMarketQuest() async {
     try {
-      debugPrint('수정16차 선택 stockId: $stockId / stockName: $stockName');
+      await DailyQuestService.instance.completeOpenMarketQuest();
+    } catch (_) {}
+  }
 
-      final prices = await _stockPriceRepository.fetchCandlesByStockId(stockId);
-
-      if (!mounted) return;
-
-      setState(() {
-        _selectedStockPrices = prices;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _selectedStockPrices = [];
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('차트 데이터를 불러오지 못했습니다. $e'),
-        ),
-      );
-    } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isChartLoading = false;
-      });
-    }
+  Future<void> _loadInitialData() async {
+    await _loadMarketItems();
+    await _loadWallet();
+    await _loadHoldings();
+    await _loadTradeHistory();
   }
 
   void _startRealtimePriceUpdate() {
     _realtimePriceTimer?.cancel();
 
     _realtimePriceTimer = Timer.periodic(
-      const Duration(seconds: 30),
+      const Duration(minutes: 5),
           (_) async {
         if (!mounted || _isRealtimeUpdating) return;
 
@@ -158,15 +127,11 @@ class _StockScreenState extends State<StockScreen> {
           await _loadMarketItems();
 
           final selectedItem = _selectedMarketItem;
-
           if (selectedItem != null) {
-            await _loadStockChart(
-              selectedItem.id,
-              selectedItem.name,
-            );
+            await _loadStockChart(selectedItem.id, selectedItem.name);
           }
         } catch (e) {
-          debugPrint('수정20차 실시간 가격 갱신 실패: $e');
+          debugPrint('실시간 가격 갱신 실패: $e');
         } finally {
           _isRealtimeUpdating = false;
         }
@@ -174,24 +139,9 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Future<void> _loadInitialData() async {
-    await _loadMarketItems();
-    await _loadWallet();
-    await _loadHoldings();
-    await _loadTradeHistory();
-  }
-
-  Future<void> _completeOpenMarketQuest() async {
-    try {
-      await DailyQuestService.instance.completeOpenMarketQuest();
-    } catch (_) {}
-  }
-
   Future<void> _loadMarketItems() async {
     try {
       final rows = await _stockRepository.fetchActiveStocks();
-
-      debugPrint('수정16차 stock rows: $rows');
 
       final items = rows.map((row) {
         return _StockItem(
@@ -214,10 +164,17 @@ class _StockScreenState extends State<StockScreen> {
 
         if (_selectedMarketItem == null && items.isNotEmpty) {
           _selectedMarketItem = items.first;
+          _selectedOrderPrice = null;
 
           Future.microtask(() {
             _loadStockChart(items.first.id, items.first.name);
           });
+        } else if (_selectedMarketItem != null) {
+          final selectedCode = _selectedMarketItem!.code;
+          try {
+            _selectedMarketItem =
+                items.firstWhere((item) => item.code == selectedCode);
+          } catch (_) {}
         }
       });
     } catch (e) {
@@ -286,6 +243,7 @@ class _StockScreenState extends State<StockScreen> {
       if (!mounted) return;
       setState(() {
         _tradeHistoryItems = [];
+        _tradeHistoryPage = 0;
       });
       return;
     }
@@ -296,10 +254,37 @@ class _StockScreenState extends State<StockScreen> {
       if (!mounted) return;
       setState(() {
         _tradeHistoryItems = histories;
+        _tradeHistoryPage = 0;
       });
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('거래내역을 불러오지 못했습니다: $e');
+    }
+  }
+
+  Future<void> _loadStockChart(String stockId, String stockName) async {
+    setState(() {
+      _isChartLoading = true;
+    });
+
+    try {
+      final prices = await _stockPriceRepository.fetchCandlesByStockId(stockId);
+
+      if (!mounted) return;
+      setState(() {
+        _selectedStockPrices = prices;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _selectedStockPrices = [];
+      });
+      _showSnackBar('차트 데이터를 불러오지 못했습니다: $e');
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isChartLoading = false;
+      });
     }
   }
 
@@ -324,6 +309,10 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   double get _cash => (_wallet?.cashBalance ?? 0).toDouble();
+
+  double get _orderPrice {
+    return _selectedOrderPrice ?? _selectedMarketItem?.currentPrice ?? 0;
+  }
 
   double get _totalStockValue {
     double total = 0;
@@ -360,9 +349,7 @@ class _StockScreenState extends State<StockScreen> {
       totalBuyAmount += holding.averagePrice * holding.quantity;
     }
 
-    if (totalBuyAmount <= 0) {
-      return 0;
-    }
+    if (totalBuyAmount <= 0) return 0;
 
     return (_totalProfitAmount / totalBuyAmount) * 100;
   }
@@ -411,12 +398,11 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     if (_selectedMarketFilter != '전체') {
-      result = result
-          .where((item) => item.market == _selectedMarketFilter)
-          .toList();
+      result =
+          result.where((item) => item.market == _selectedMarketFilter).toList();
     }
 
-    final String keyword = _searchController.text.trim().toLowerCase();
+    final keyword = _searchController.text.trim().toLowerCase();
     if (keyword.isNotEmpty) {
       result = result.where((item) {
         return item.name.toLowerCase().contains(keyword) ||
@@ -445,6 +431,18 @@ class _StockScreenState extends State<StockScreen> {
     return result;
   }
 
+  List<double> _buildAskPrices(double currentPrice) {
+    return List.generate(8, (index) {
+      return currentPrice + ((8 - index) * 100);
+    });
+  }
+
+  List<double> _buildBidPrices(double currentPrice) {
+    return List.generate(8, (index) {
+      return currentPrice - ((index + 1) * 100);
+    });
+  }
+
   Color _changeColor(double value) {
     if (value > 0) return const Color(0xFFDC2626);
     if (value < 0) return const Color(0xFF2563EB);
@@ -459,19 +457,17 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   String _formatSignedPrice(num value) {
-    final String prefix = value > 0 ? '+' : '';
+    final prefix = value > 0 ? '+' : '';
     return '$prefix${_formatPrice(value)}';
   }
 
   String _formatSignedPercent(double value) {
-    final String prefix = value > 0 ? '+' : '';
+    final prefix = value > 0 ? '+' : '';
     return '$prefix${value.toStringAsFixed(2)}%';
   }
 
   String _formatDateTime(DateTime? value) {
-    if (value == null) {
-      return '-';
-    }
+    if (value == null) return '-';
 
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
@@ -487,6 +483,22 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  void _increaseQuantity() {
+    final current = int.tryParse(_quantityController.text.trim()) ?? 1;
+    _quantityController.text = (current + 1).toString();
+  }
+
+  void _decreaseQuantity() {
+    final current = int.tryParse(_quantityController.text.trim()) ?? 1;
+
+    if (current <= 1) {
+      _quantityController.text = '1';
+      return;
+    }
+
+    _quantityController.text = (current - 1).toString();
+  }
+
   Future<void> _handleBuy() async {
     if (!_isLoggedIn || _user == null) {
       _showSnackBar('로그인 후 이용 가능합니다.');
@@ -498,7 +510,7 @@ class _StockScreenState extends State<StockScreen> {
       return;
     }
 
-    final int quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+    final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
 
     if (quantity <= 0) {
       _showSnackBar('수량은 1주 이상 입력해주세요.');
@@ -518,7 +530,7 @@ class _StockScreenState extends State<StockScreen> {
         userId: _user!.id,
         stockCode: item.code,
         stockName: item.name,
-        price: item.currentPrice,
+        price: _orderPrice,
         quantity: quantity,
       );
 
@@ -548,7 +560,7 @@ class _StockScreenState extends State<StockScreen> {
       return;
     }
 
-    final int quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+    final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
 
     if (quantity <= 0) {
       _showSnackBar('수량은 1주 이상 입력해주세요.');
@@ -568,7 +580,7 @@ class _StockScreenState extends State<StockScreen> {
         userId: _user!.id,
         stockCode: item.code,
         stockName: item.name,
-        price: item.currentPrice,
+        price: _orderPrice,
         quantity: quantity,
       );
 
@@ -590,11 +602,11 @@ class _StockScreenState extends State<StockScreen> {
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(_cardRadius),
+      borderRadius: BorderRadius.circular(_radius),
       border: Border.all(color: const Color(0xFFE5E7EB)),
       boxShadow: const [
         BoxShadow(
-          color: Color(0x08000000),
+          color: Color(0x06000000),
           blurRadius: 8,
           offset: Offset(0, 3),
         ),
@@ -604,92 +616,38 @@ class _StockScreenState extends State<StockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<_StockItem> filteredItems = _filteredItems;
+    final filteredItems = _filteredItems;
 
     return Container(
       width: double.infinity,
       height: double.infinity,
       color: Colors.white,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final bool isWide = constraints.maxWidth >= 1280;
-          final bool isTablet = constraints.maxWidth >= 900;
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _pageMaxWidth),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: _sectionGap),
-                    _buildCategoryTabSection(),
-                    const SizedBox(height: _sectionGap),
-                    _buildSummarySection(),
-                    const SizedBox(height: _sectionGap),
-                    _buildLoginNoticeSection(),
-                    const SizedBox(height: _sectionGap),
-                    _buildChartPlaceholderSection(),
-                    const SizedBox(height: _sectionGap),
-                    _buildFilterSection(),
-                    const SizedBox(height: _sectionGap),
-                    if (isWide)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildStockListSection(filteredItems),
-                                const SizedBox(height: _sectionGap),
-                                _buildTradeHistorySection(),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: _sectionGap),
-                          SizedBox(
-                            width: 430,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildDetailSection(),
-                                const SizedBox(height: _sectionGap),
-                                _buildTradeSection(),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildStockListSection(filteredItems),
-                          const SizedBox(height: 16),
-                          _buildDetailSection(),
-                          const SizedBox(height: 16),
-                          _buildTradeSection(),
-                          const SizedBox(height: 16),
-                          _buildTradeHistorySection(),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _pageMaxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: _gap),
+                _buildSummarySection(),
+                const SizedBox(height: _gap),
+                _buildTradingLayout(filteredItems),
+              ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
+    final item = _selectedMarketItem;
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [
@@ -697,43 +655,97 @@ class _StockScreenState extends State<StockScreen> {
             Color(0xFF1E293B),
           ],
         ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(22),
       ),
       child: Row(
         children: [
-          const Expanded(
-            child: Column(
+          Expanded(
+            child: item == null
+                ? const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '주식',
                   style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
                     color: Colors.white,
                   ),
                 ),
-                SizedBox(height: 10),
+                SizedBox(height: 6),
                 Text(
-                  '실제 보유 데이터 기준 자산, 보유종목, 거래내역이 표시됩니다.',
+                  '종목을 선택하면 차트, 호가, 주문창이 표시됩니다.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFFCBD5E1),
+                  ),
+                ),
+              ],
+            )
+                : Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFFFF).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    item.name.characters.first,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.code} · ${item.market}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFCBD5E1),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 28),
+                Text(
+                  '₩ ${_formatPrice(item.currentPrice)}',
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _formatSignedPercent(item.changeRate),
                   style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFFCBD5E1),
-                    height: 1.6,
+                    fontWeight: FontWeight.w900,
+                    color: _changeColor(item.changeRate),
                   ),
                 ),
               ],
             ),
           ),
           SizedBox(
-            height: 44,
+            height: 42,
             child: ElevatedButton(
               onPressed: () {
                 Navigator.of(context).push(
@@ -747,14 +759,14 @@ class _StockScreenState extends State<StockScreen> {
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF0F172A),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(13),
                 ),
               ),
               child: const Text(
                 '종목 등록',
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
@@ -764,92 +776,24 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _buildCategoryTabSection() {
-    final List<String> tabs = [
-      '전체',
-      '국내주식',
-      '해외주식',
-      'ETF',
-      '테마',
-    ];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: _cardDecoration(),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: tabs.map((tab) {
-            final bool isSelected = _selectedCategoryTab == tab;
-
-            return Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _selectedCategoryTab = tab;
-                  });
-                },
-                borderRadius: BorderRadius.circular(14),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF0F172A) : Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFF0F172A)
-                          : const Color(0xFFE5E7EB),
-                    ),
-                  ),
-                  child: Text(
-                    tab,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected
-                          ? Colors.white
-                          : const Color(0xFF374151),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSummarySection() {
-    final bool hasHolding = _holdingItems.isNotEmpty;
-
-    final List<Widget> cards = [
+    final cards = [
       _buildSummaryCard(
         title: '총 자산',
         value: '₩ ${_formatPrice(_totalAsset)}',
-        subValue: _isLoggedIn ? '현금 + 주식 평가금' : '비로그인 상태',
+        subValue: '현금 + 주식 평가금',
         valueColor: const Color(0xFF111827),
       ),
       _buildSummaryCard(
         title: '보유 현금',
         value: '₩ ${_formatPrice(_cash)}',
-        subValue: !_isLoggedIn
-            ? '비로그인 상태'
-            : _isWalletLoading
-            ? '지갑 불러오는 중'
-            : 'wallet.cash_balance 기준',
+        subValue: _isWalletLoading ? '지갑 불러오는 중' : 'wallet.cash_balance',
         valueColor: const Color(0xFF111827),
       ),
       _buildSummaryCard(
         title: '주식 평가금',
         value: '₩ ${_formatPrice(_totalStockValue)}',
-        subValue: hasHolding ? '보유 종목 현재가 기준' : '보유 종목 없음',
+        subValue: '보유 종목 현재가 기준',
         valueColor: const Color(0xFF111827),
       ),
       _buildSummaryCard(
@@ -860,55 +804,13 @@ class _StockScreenState extends State<StockScreen> {
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bool isWide = constraints.maxWidth >= 1100;
-        final bool isTablet = constraints.maxWidth >= 700;
-
-        if (isWide) {
-          return Row(
-            children: [
-              for (int i = 0; i < cards.length; i++) ...[
-                Expanded(child: cards[i]),
-                if (i != cards.length - 1) const SizedBox(width: 16),
-              ],
-            ],
-          );
-        }
-
-        if (isTablet) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[1]),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(child: cards[2]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[3]),
-                ],
-              ),
-            ],
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (int i = 0; i < cards.length; i++) ...[
-              cards[i],
-              if (i != cards.length - 1) const SizedBox(height: 12),
-            ],
-          ],
-        );
-      },
+    return Row(
+      children: [
+        for (int i = 0; i < cards.length; i++) ...[
+          Expanded(child: cards[i]),
+          if (i != cards.length - 1) const SizedBox(width: 12),
+        ],
+      ],
     );
   }
 
@@ -919,8 +821,8 @@ class _StockScreenState extends State<StockScreen> {
     required Color valueColor,
   }) {
     return Container(
-      constraints: const BoxConstraints(minHeight: _summaryCardMinHeight),
-      padding: const EdgeInsets.all(_cardPadding),
+      height: 124,
+      padding: const EdgeInsets.all(16),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -928,30 +830,31 @@ class _StockScreenState extends State<StockScreen> {
           Text(
             title,
             style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF6B7280),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
               color: valueColor,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Text(
             subValue,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF9CA3AF),
+              fontSize: 10,
+              height: 1.0,
+              color: Color(0xFF94A3B8),
             ),
           ),
         ],
@@ -959,671 +862,75 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _buildLoginNoticeSection() {
+  Widget _buildTradingLayout(List<_StockItem> filteredItems) {
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 7,
+              child: _buildChartSection(),
+            ),
+            const SizedBox(width: _gap),
+            Expanded(
+              flex: 3,
+              child: _buildMarketListSection(filteredItems),
+            ),
+          ],
+        ),
+        const SizedBox(height: _gap),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 7,
+              child: _buildBottomTradingArea(),
+            ),
+            const SizedBox(width: _gap),
+            Expanded(
+              flex: 3,
+              child: _buildTradePanelSection(),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChartSection() {
+    final item = _selectedMarketItem;
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      height: 520,
+      padding: const EdgeInsets.all(16),
       decoration: _cardDecoration(),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            _isLoggedIn
-                ? Icons.info_outline_rounded
-                : Icons.lock_outline_rounded,
-            color:
-            _isLoggedIn ? const Color(0xFF2563EB) : const Color(0xFFB45309),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item == null ? '차트' : '${item.name} 차트',
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              _buildRealtimeBadge(),
+            ],
           ),
-          const SizedBox(width: 12),
+          const SizedBox(height: 12),
           Expanded(
-            child: Text(
-              _isLoggedIn
-                  ? '현재 계정 기준 보유 현금, 보유종목, 거래내역이 실제 DB와 연결되어 표시됩니다.'
-                  : '비로그인 상태입니다. 로그인하지 않았으므로 자산, 보유종목, 거래내역은 표시되지 않습니다.',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF374151),
-                height: 1.5,
-              ),
+            child: _isChartLoading
+                ? const Center(child: CircularProgressIndicator())
+                : StockPriceChart(
+              prices: _selectedStockPrices,
+              currentPrice: item?.currentPrice ?? 0,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterSection() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: _cardDecoration(),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: 320,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: '종목명 / 종목코드 검색',
-                prefixIcon: const Icon(Icons.search_rounded),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 14,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFF2563EB)),
-                ),
-              ),
-            ),
-          ),
-          _buildDropdownBox(
-            value: _selectedMarketFilter,
-            items: const ['전체', '국내', '해외'],
-            onChanged: (value) {
-              setState(() {
-                _selectedMarketFilter = value!;
-              });
-            },
-          ),
-          _buildDropdownBox(
-            value: _selectedSort,
-            items: const ['등락률', '현재가', '이름'],
-            onChanged: (value) {
-              setState(() {
-                _selectedSort = value!;
-              });
-            },
-          ),
-          FilterChip(
-            label: const Text('보유 종목만'),
-            selected: _showOnlyOwned,
-            onSelected: (value) {
-              setState(() {
-                _showOnlyOwned = value;
-              });
-            },
-            selectedColor: const Color(0xFFDBEAFE),
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: Color(0xFFE5E7EB)),
-            labelStyle: TextStyle(
-              color: _showOnlyOwned
-                  ? const Color(0xFF1D4ED8)
-                  : const Color(0xFF374151),
-              fontWeight: FontWeight.w700,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDropdownBox({
-    required String value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          items: items
-              .map(
-                (item) => DropdownMenuItem<String>(
-              value: item,
-              child: Text(item),
-            ),
-          )
-              .toList(),
-          onChanged: onChanged,
-          borderRadius: BorderRadius.circular(14),
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF111827),
-          ),
-          icon: const Icon(Icons.keyboard_arrow_down_rounded),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStockListSection(List<_StockItem> items) {
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 260),
-      padding: const EdgeInsets.all(12),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '종목 목록',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (items.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 52),
-              alignment: Alignment.center,
-              child: Text(
-                _isLoggedIn
-                    ? '조건에 맞는 종목이 없습니다.'
-                    : '종목 데이터가 없거나 필터 조건에 맞는 결과가 없습니다.',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF6B7280),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            )
-          else
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(2.2),
-                  1: FlexColumnWidth(1.2),
-                  2: FlexColumnWidth(1.0),
-                  3: FlexColumnWidth(1.0),
-                  4: FlexColumnWidth(1.2),
-                },
-                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                children: [
-                  _buildStockTableHeader(),
-                  for (final item in items) _buildStockTableRow(item),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  TableRow _buildStockTableHeader() {
-    const TextStyle headerStyle = TextStyle(
-      fontSize: 11,
-      height: 1.0,
-      fontWeight: FontWeight.w800,
-      color: Color(0xFF64748B),
-    );
-
-    return const TableRow(
-      decoration: BoxDecoration(
-        color: Color(0xFFF8FAFC),
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E7EB)),
-        ),
-      ),
-      children: [
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Text('종목', style: headerStyle),
-        ),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          child: Text('현재가', textAlign: TextAlign.right, style: headerStyle),
-        ),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          child: Text('등락률', textAlign: TextAlign.right, style: headerStyle),
-        ),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          child: Text('보유수량', textAlign: TextAlign.right, style: headerStyle),
-        ),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Text('평가손익', textAlign: TextAlign.right, style: headerStyle),
-        ),
-      ],
-    );
-  }
-
-  TableRow _buildStockTableRow(_StockItem item) {
-    final bool isSelected = _selectedMarketItem?.code == item.code;
-    final StockHoldingModel? holding = _findHoldingByCode(item.code);
-    final int holdingQuantity = holding?.quantity ?? 0;
-    final double profitAmount = holding == null
-        ? 0
-        : (item.currentPrice - holding.averagePrice) * holding.quantity;
-
-    return TableRow(
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
-        border: const Border(
-          bottom: BorderSide(color: Color(0xFFF1F5F9)),
-        ),
-      ),
-      children: [
-        _buildStockTableCell(
-          item: item,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: _changeColor(item.changeRate),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.05,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF111827),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.code,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        height: 1.0,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        _buildStockTableCell(
-          item: item,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 11),
-          child: Text(
-            '₩ ${_formatPrice(item.currentPrice)}',
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              height: 1.0,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
-            ),
-          ),
-        ),
-        _buildStockTableCell(
-          item: item,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 11),
-          child: Text(
-            _formatSignedPercent(item.changeRate),
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.0,
-              fontWeight: FontWeight.w800,
-              color: _changeColor(item.changeRate),
-            ),
-          ),
-        ),
-        _buildStockTableCell(
-          item: item,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 11),
-          child: Text(
-            '$holdingQuantity주',
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              height: 1.0,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF334155),
-            ),
-          ),
-        ),
-        _buildStockTableCell(
-          item: item,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-          child: Text(
-            '${_formatSignedPrice(profitAmount)}원',
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.0,
-              fontWeight: FontWeight.w800,
-              color: _changeColor(profitAmount),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStockTableCell({
-    required _StockItem item,
-    required Widget child,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-  }) {
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedMarketItem = item;
-        });
-
-        _loadStockChart(item.id, item.name);
-      },
-      child: Padding(
-        padding: padding,
-        child: child,
-      ),
-    );
-  }
-
-  Widget _buildDetailSection() {
-    if (_selectedMarketItem == null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14), // 🔥 줄임
-        decoration: _cardDecoration(),
-        child: const Center(
-          child: Text(
-            '선택된 종목이 없습니다.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
-          ),
-        ),
-      );
-    }
-
-    final item = _selectedMarketItem!;
-    final holding = _findHoldingByCode(item.code);
-
-    final int qty = holding?.quantity ?? 0;
-    final double avg = holding?.averagePrice ?? 0;
-    final double eval = item.currentPrice * qty;
-    final double profit = holding == null
-        ? 0
-        : (item.currentPrice - holding.averagePrice) * holding.quantity;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14), // 🔥 핵심
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '선택 종목 상세',
-            style: TextStyle(
-              fontSize: 16, // 🔥 줄임
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          Text(
-            item.name,
-            style: const TextStyle(
-              fontSize: 18, // 🔥 줄임
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-
-          Text(
-            '${item.code} · ${item.market}',
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF9CA3AF),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildDetailMetric(
-                  title: '현재가',
-                  value: '₩ ${_formatPrice(item.currentPrice)}',
-                  valueColor: Colors.black,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDetailMetric(
-                  title: '등락률',
-                  value: _formatSignedPercent(item.changeRate),
-                  valueColor: _changeColor(item.changeRate),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildDetailMetric(
-                  title: '보유수량',
-                  value: '$qty주',
-                  valueColor: Colors.black,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDetailMetric(
-                  title: '평균단가',
-                  value: qty == 0 ? '-' : '₩ ${_formatPrice(avg)}',
-                  valueColor: Colors.black,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildDetailMetric(
-                  title: '평가금액',
-                  value: '₩ ${_formatPrice(eval)}',
-                  valueColor: Colors.black,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDetailMetric(
-                  title: '평가손익',
-                  value: '${_formatSignedPrice(profit)}원',
-                  valueColor: _changeColor(profit),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailMetric({
-    required String title,
-    required String value,
-    required Color valueColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(10), // 🔥 줄임
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 10, // 🔥 줄임
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF6B7280),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 14, // 🔥 핵심
-              fontWeight: FontWeight.w800,
-              color: valueColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTradeSection() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14), // 🔥 줄임
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '매수 / 매도',
-            style: TextStyle(
-              fontSize: 16, // 🔥 줄임
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          TextField(
-            controller: _quantityController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: '수량',
-              isDense: true, // 🔥 핵심
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: _selectedMarketItem == null
-                ? const Text('종목 선택 필요')
-                : Builder(
-              builder: (_) {
-                final int qty =
-                    int.tryParse(_quantityController.text) ?? 0;
-                final double price = _selectedMarketItem!.currentPrice;
-
-                final int total = (price * qty).round();
-                final int afterCash = (_cash - total).round();
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('현재가: ₩ ${_formatPrice(price)}',
-                        style: const TextStyle(fontSize: 12)),
-                    Text('수량: $qty주',
-                        style: const TextStyle(fontSize: 12)),
-                    const SizedBox(height: 6),
-                    Text('결제금액: ₩ ${_formatPrice(total)}',
-                        style: const TextStyle(fontSize: 12)),
-                    Text('매수 후 현금: ₩ ${_formatPrice(afterCash)}',
-                        style: const TextStyle(fontSize: 12)),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 44, // 🔥 줄임
-                  child: ElevatedButton(
-                    onPressed: _handleBuy,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF16A34A),
-                    ),
-                    child: const Text('매수', style: TextStyle(fontSize: 13)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: 44, // 🔥 줄임
-                  child: ElevatedButton(
-                    onPressed: _handleSell,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                    ),
-                    child: const Text('매도', style: TextStyle(fontSize: 13)),
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -1631,7 +938,7 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Widget _buildRealtimeBadge() {
-    final String timeText = _lastRealtimeUpdatedAt == null
+    final timeText = _lastRealtimeUpdatedAt == null
         ? '대기 중'
         : '${_lastRealtimeUpdatedAt!.hour.toString().padLeft(2, '0')}:'
         '${_lastRealtimeUpdatedAt!.minute.toString().padLeft(2, '0')}:'
@@ -1645,7 +952,6 @@ class _StockScreenState extends State<StockScreen> {
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 7,
@@ -1657,11 +963,11 @@ class _StockScreenState extends State<StockScreen> {
           ),
           const SizedBox(width: 6),
           Text(
-            '실시간 · 30초 갱신 · $timeText',
+            '실시간 · 5분 갱신 · $timeText',
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF374151),
+              color: Color(0xFF475569),
             ),
           ),
         ],
@@ -1669,158 +975,898 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _buildChartPlaceholderSection() {
+  Widget _buildMarketListSection(List<_StockItem> items) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(_cardPadding),
+      height: 520,
+      padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _selectedStockName == null
-                      ? '차트 영역'
-                      : '$_selectedStockName 차트',
+          const Text(
+            '종목 리스트',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildFilterCompact(),
+          const SizedBox(height: 10),
+          Expanded(
+            child: items.isEmpty
+                ? const Center(
+              child: Text(
+                '조건에 맞는 종목이 없습니다.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            )
+                : ListView.separated(
+              itemCount: items.length,
+              separatorBuilder: (_, __) {
+                return const Divider(
+                  height: 1,
+                  color: Color(0xFFF1F5F9),
+                );
+              },
+              itemBuilder: (context, index) {
+                return _buildMarketListRow(items[index]);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterCompact() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 38,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            style: const TextStyle(fontSize: 12),
+            decoration: InputDecoration(
+              hintText: '종목명 / 코드 검색',
+              hintStyle: const TextStyle(fontSize: 12),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(11),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(11),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSmallSelect(
+                value: _selectedMarketFilter,
+                items: const ['전체', '국내', '해외'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedMarketFilter = value!;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildSmallSelect(
+                value: _selectedSort,
+                items: const ['이름', '현재가', '등락률'],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedSort = value!;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSmallSelect({
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          items: items
+              .map(
+                (item) => DropdownMenuItem(
+              value: item,
+              child: Text(item),
+            ),
+          )
+              .toList(),
+          onChanged: onChanged,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF111827),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMarketListRow(_StockItem item) {
+    final selected = _selectedMarketItem?.code == item.code;
+    final holding = _findHoldingByCode(item.code);
+    final holdingQty = holding?.quantity ?? 0;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedMarketItem = item;
+          _selectedOrderPrice = null;
+        });
+
+        _loadStockChart(item.id, item.name);
+      },
+      child: Container(
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        color: selected ? const Color(0xFFEFF6FF) : Colors.white,
+        child: Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: _changeColor(item.changeRate),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.code,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '₩ ${_formatPrice(item.currentPrice)}',
                   style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
                     color: Color(0xFF111827),
                   ),
                 ),
+                const SizedBox(height: 3),
+                Text(
+                  '${_formatSignedPercent(item.changeRate)} · ${holdingQty}주',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: _changeColor(item.changeRate),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomTradingArea() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 45,
+          child: _buildOrderBookSection(),
+        ),
+        const SizedBox(width: _gap),
+        Expanded(
+          flex: 55,
+          child: _buildTradeHistorySection(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOrderBookSection() {
+    final item = _selectedMarketItem;
+
+    if (item == null) {
+      return Container(
+        height: 420,
+        padding: const EdgeInsets.all(16),
+        decoration: _cardDecoration(),
+        child: const Center(
+          child: Text(
+            '호가를 표시할 종목을 선택해주세요.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final askPrices = _buildAskPrices(item.currentPrice);
+    final bidPrices = _buildBidPrices(item.currentPrice);
+
+    return Container(
+      height: 420,
+      padding: const EdgeInsets.all(14),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '호가',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Column(
+              children: [
+                for (final price in askPrices)
+                  Expanded(
+                    child: _buildOrderBookRow(
+                      label: '매도',
+                      price: price,
+                      isAsk: true,
+                    ),
+                  ),
+                Container(
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF8FAFC),
+                    border: Border(
+                      top: BorderSide(color: Color(0xFFE5E7EB)),
+                      bottom: BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                  ),
+                  child: Text(
+                    '현재가 ₩ ${_formatPrice(item.currentPrice)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                ),
+                for (final price in bidPrices)
+                  Expanded(
+                    child: _buildOrderBookRow(
+                      label: '매수',
+                      price: price,
+                      isAsk: false,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderBookRow({
+    required String label,
+    required double price,
+    required bool isAsk,
+  }) {
+    final selected = _selectedOrderPrice?.round() == price.round();
+
+    final fakeQty = (price.round().abs() % 17) + 1;
+    final color = isAsk ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedOrderPrice = price;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFFFFF7ED)
+              : isAsk
+              ? const Color(0xFFFFF1F2)
+              : const Color(0xFFEFF6FF),
+          border: const Border(
+            bottom: BorderSide(color: Color(0xFFFFFFFF), width: 1),
+          ),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 42,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
               ),
-              _buildRealtimeBadge(),
+            ),
+            Expanded(
+              child: Text(
+                '₩ ${_formatPrice(price)}',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            SizedBox(
+              width: 42,
+              child: Text(
+                '$fakeQty주',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTradePanelSection() {
+    final item = _selectedMarketItem;
+    final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+    final price = _orderPrice;
+    final total = (price * quantity).round();
+    final afterCash = (_cash - total).round();
+
+    return Container(
+      height: 470,
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '주문',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildOrderTab('매수', _isBuyOrder),
+              const SizedBox(width: 8),
+              _buildOrderTab('매도', !_isBuyOrder),
             ],
           ),
           const SizedBox(height: 14),
-          if (_isChartLoading)
-            Container(
-              height: 260,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const CircularProgressIndicator(),
-            )
-          else
-            StockPriceChart(
-              prices: _selectedStockPrices,
+          const Text(
+            '주문가격',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF64748B),
             ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.centerLeft,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Text(
+              item == null ? '-' : '₩ ${_formatPrice(price)}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF111827),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '수량',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 42,
+                  child: TextField(
+                    controller: _quantityController,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildQuantityButton('-', _decreaseQuantity),
+              const SizedBox(width: 6),
+              _buildQuantityButton('+', _increaseQuantity),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildOrderInfoRow(
+                  '현재가',
+                  item == null ? '-' : '₩ ${_formatPrice(item.currentPrice)}',
+                ),
+                _buildOrderInfoRow(
+                  '선택가',
+                  item == null ? '-' : '₩ ${_formatPrice(price)}',
+                ),
+                _buildOrderInfoRow('수량', '$quantity주'),
+                _buildOrderInfoRow('주문금액', '₩ ${_formatPrice(total)}'),
+                _buildOrderInfoRow(
+                  _isBuyOrder ? '매수 후 현금' : '예상 입금',
+                  _isBuyOrder
+                      ? '₩ ${_formatPrice(afterCash)}'
+                      : '₩ ${_formatPrice(total)}',
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: _isTrading
+                  ? null
+                  : _isBuyOrder
+                  ? _handleBuy
+                  : _handleSell,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isBuyOrder
+                    ? const Color(0xFF16A34A)
+                    : const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
+              child: Text(
+                _isBuyOrder ? '매수 주문' : '매도 주문',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderTab(String label, bool selected) {
+    final bool isBuyTab = label == '매수';
+
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _isBuyOrder = isBuyTab;
+          });
+        },
+        borderRadius: BorderRadius.circular(11),
+        child: Container(
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? isBuyTab
+                ? const Color(0xFF16A34A)
+                : const Color(0xFFDC2626)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(
+              color: selected
+                  ? isBuyTab
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFDC2626)
+                  : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: selected ? Colors.white : const Color(0xFF111827),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuantityButton(String label, VoidCallback onPressed) {
+    return SizedBox(
+      width: 42,
+      height: 42,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(11),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderInfoRow(String title, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF111827),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildTradeHistorySection() {
+    final totalCount = _tradeHistoryItems.length;
+    final totalPages =
+    totalCount == 0 ? 1 : (totalCount / _tradeHistoryPageSize).ceil();
+
+    final safePage = _tradeHistoryPage.clamp(0, totalPages - 1);
+    final startIndex = safePage * _tradeHistoryPageSize;
+    final endIndex = min(startIndex + _tradeHistoryPageSize, totalCount);
+
+    final pageItems = totalCount == 0
+        ? <StockTradeHistoryModel>[]
+        : _tradeHistoryItems.sublist(startIndex, endIndex);
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      height: 420,
+      padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '최근 체결내역',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '최근 체결내역',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              Text(
+                '최신순 · ${safePage + 1} / $totalPages',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Row(
+              children: [
+                SizedBox(
+                  width: 50,
+                  child: Text('구분', style: _historyHeaderStyle),
+                ),
+                Expanded(
+                  child: Text('종목', style: _historyHeaderStyle),
+                ),
+                SizedBox(
+                  width: 46,
+                  child: Text(
+                    '수량',
+                    textAlign: TextAlign.right,
+                    style: _historyHeaderStyle,
+                  ),
+                ),
+                SizedBox(
+                  width: 86,
+                  child: Text(
+                    '체결가',
+                    textAlign: TextAlign.right,
+                    style: _historyHeaderStyle,
+                  ),
+                ),
+                SizedBox(
+                  width: 70,
+                  child: Text(
+                    '시간',
+                    textAlign: TextAlign.right,
+                    style: _historyHeaderStyle,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 14),
-          if (_tradeHistoryItems.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              alignment: Alignment.center,
+          const SizedBox(height: 4),
+          Expanded(
+            child: pageItems.isEmpty
+                ? Center(
               child: Text(
-                _isLoggedIn
-                    ? '거래내역이 없습니다.'
-                    : '비로그인 상태에서는 거래내역이 표시되지 않습니다.',
+                _isLoggedIn ? '거래내역이 없습니다.' : '로그인 후 표시됩니다.',
                 style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF6B7280),
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
                 ),
               ),
             )
-          else
-            Column(
-              children: _tradeHistoryItems
+                : Column(
+              children: pageItems
                   .map((item) => _buildTradeHistoryRow(item))
                   .toList(),
             ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _buildPageButton(
+                label: '이전',
+                enabled: safePage > 0,
+                onPressed: () {
+                  setState(() {
+                    _tradeHistoryPage = safePage - 1;
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: Text(
+                  '${safePage + 1} / $totalPages',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildPageButton(
+                label: '다음',
+                enabled: safePage < totalPages - 1,
+                onPressed: () {
+                  setState(() {
+                    _tradeHistoryPage = safePage + 1;
+                  });
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
   Widget _buildTradeHistoryRow(StockTradeHistoryModel item) {
-    final bool isBuy = item.tradeType == 'buy';
-    final String tradeLabel = isBuy ? '매수' : '매도';
+    final isBuy = item.tradeType == 'buy';
+    final tradeLabel = isBuy ? '매수' : '매도';
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFF1F5F9)),
+        ),
+      ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isBuy ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              tradeLabel,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color:
-                isBuy ? const Color(0xFF047857) : const Color(0xFFB91C1C),
+          SizedBox(
+            width: 50,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isBuy
+                      ? const Color(0xFFECFDF5)
+                      : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  tradeLabel,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: isBuy
+                        ? const Color(0xFF047857)
+                        : const Color(0xFFB91C1C),
+                  ),
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 14),
           Expanded(
             child: Text(
               item.stockName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
                 color: Color(0xFF111827),
               ),
             ),
           ),
-          Text(
-            '${item.quantity}주',
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF374151),
-            ),
-          ),
-          const SizedBox(width: 18),
-          Text(
-            '₩ ${_formatPrice(item.price)}',
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF374151),
-            ),
-          ),
-          const SizedBox(width: 18),
           SizedBox(
-            width: 110,
+            width: 46,
+            child: Text(
+              '${item.quantity}주',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 86,
+            child: Text(
+              '₩ ${_formatPrice(item.price)}',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 70,
             child: Text(
               _formatDateTime(item.createdAt),
               textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF9CA3AF),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF94A3B8),
               ),
             ),
           ),
@@ -1829,48 +1875,39 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  void _startPriceSimulation() {
-    _priceTimer?.cancel();
-
-    _priceTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (!mounted || _marketItems.isEmpty) return;
-
-      setState(() {
-        for (int i = 0; i < _marketItems.length; i++) {
-          final item = _marketItems[i];
-
-          final double changePercent = (_random.nextDouble() * 0.006) - 0.003;
-
-          final double newPrice = (item.currentPrice * (1 + changePercent))
-              .clamp(100.0, 100000000.0)
-              .toDouble();
-
-          final updatedItem = _StockItem(
-            id: item.id,
-            code: item.code,
-            name: item.name,
-            market: item.market,
-            currentPrice: newPrice,
-            changeRate: changePercent * 100,
-            description: item.description,
-          );
-
-          _marketItems[i] = updatedItem;
-
-          if (_selectedMarketItem?.code == item.code) {
-            _selectedMarketItem = updatedItem;
-
-            _priceHistory.add(newPrice);
-
-            if (_priceHistory.length > 30) {
-              _priceHistory.removeAt(0);
-            }
-          }
-        }
-      });
-    });
+  Widget _buildPageButton({
+    required String label,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 32,
+      child: OutlinedButton(
+        onPressed: enabled ? onPressed : null,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
   }
 }
+
+const TextStyle _historyHeaderStyle = TextStyle(
+  fontSize: 10,
+  fontWeight: FontWeight.w900,
+  color: Color(0xFF64748B),
+);
 
 class _StockItem {
   final String id;
