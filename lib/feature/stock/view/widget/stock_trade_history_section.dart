@@ -35,7 +35,7 @@ class StockTradeHistorySection extends StatelessWidget {
         : tradeHistoryItems.sublist(startIndex, endIndex);
 
     return Container(
-      height: 420,
+      height: 540,
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(),
       child: Column(
@@ -120,7 +120,7 @@ class StockTradeHistorySection extends StatelessWidget {
     final tradeLabel = isBuy ? '매수' : '매도';
 
     return Container(
-      height: 50,
+      height: 74,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: const BoxDecoration(
         border: Border(

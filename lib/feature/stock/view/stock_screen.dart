@@ -374,6 +374,14 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  StockHoldingModel? _findHoldingByCode(String code) {
+    try {
+      return _holdingItems.firstWhere((item) => item.stockCode == code);
+    } catch (_) {
+      return null;
+    }
+  }
+
   List<StockItemViewModel> get _filteredItems {
     List<StockItemViewModel> result = List.of(_marketItems);
 
@@ -448,6 +456,26 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     _quantityController.text = (current - 1).toString();
+  }
+
+  void _setMaxQuantity() {
+    final item = _selectedMarketItem;
+
+    if (item == null) {
+      _quantityController.text = '1';
+      return;
+    }
+
+    if (_isBuyOrder) {
+      final int maxBuyQuantity = _orderPrice <= 0 ? 0 : (_cash / _orderPrice).floor();
+      _quantityController.text = maxBuyQuantity <= 0 ? '1' : maxBuyQuantity.toString();
+      return;
+    }
+
+    final holding = _findHoldingByCode(item.code);
+    final int maxSellQuantity = holding?.quantity ?? 0;
+
+    _quantityController.text = maxSellQuantity <= 0 ? '1' : maxSellQuantity.toString();
   }
 
   Future<void> _handleBuy() async {
@@ -674,6 +702,9 @@ class _StockScreenState extends State<StockScreen> {
               flex: 3,
               child: StockTradePanelSection(
                 selectedItem: _selectedMarketItem,
+                selectedHolding: _selectedMarketItem == null
+                    ? null
+                    : _findHoldingByCode(_selectedMarketItem!.code),
                 quantityController: _quantityController,
                 orderPrice: _orderPrice,
                 cash: _cash,
@@ -686,6 +717,7 @@ class _StockScreenState extends State<StockScreen> {
                 },
                 onDecreaseQuantity: _decreaseQuantity,
                 onIncreaseQuantity: _increaseQuantity,
+                onSetMaxQuantity: _setMaxQuantity,
                 onBuy: _handleBuy,
                 onSell: _handleSell,
               ),

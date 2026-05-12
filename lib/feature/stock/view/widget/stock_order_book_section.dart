@@ -20,7 +20,7 @@ class StockOrderBookSection extends StatelessWidget {
 
     if (item == null) {
       return Container(
-        height: 420,
+        height: 540,
         padding: const EdgeInsets.all(16),
         decoration: _cardDecoration(),
         child: const Center(
@@ -39,7 +39,7 @@ class StockOrderBookSection extends StatelessWidget {
     final bidPrices = _buildBidPrices(item.currentPrice);
 
     return Container(
-      height: 420,
+      height: 540,
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(),
       child: Column(
