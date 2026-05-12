@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
 import 'package:stock/feature/stock/model/stock_candle_model.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
@@ -12,16 +10,17 @@ import 'package:stock/feature/stock/repository/stock_price_repository.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
 import 'package:stock/feature/stock/view/stock_register_screen.dart';
-import 'package:stock/feature/stock/view/widget/stock_market_list_section.dart';
-import 'package:stock/feature/stock/view/widget/stock_summary_section.dart';
-import 'package:stock/feature/wallet/model/wallet_model.dart';
-import 'package:stock/feature/wallet/repository/wallet_repository.dart';
-import 'package:stock/feature/stock/view/widget/stock_order_book_section.dart';
-import 'package:stock/feature/stock/view/widget/stock_trade_history_section.dart';
-import 'package:stock/feature/stock/view/widget/stock_trade_panel_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_chart_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_header_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_holding_section.dart';
+import 'package:stock/feature/stock/view/widget/stock_market_list_section.dart';
+import 'package:stock/feature/stock/view/widget/stock_order_book_section.dart';
+import 'package:stock/feature/stock/view/widget/stock_summary_section.dart';
+import 'package:stock/feature/stock/view/widget/stock_trade_history_section.dart';
+import 'package:stock/feature/stock/view/widget/stock_trade_panel_section.dart';
+import 'package:stock/feature/wallet/model/wallet_model.dart';
+import 'package:stock/feature/wallet/repository/wallet_repository.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -37,8 +36,10 @@ class _StockScreenState extends State<StockScreen> {
   final WalletRepository _walletRepository = WalletRepository();
 
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _quantityController =
-  TextEditingController(text: '1');
+  final TextEditingController _quantityController = TextEditingController(
+    text: '1',
+  );
+  final TextEditingController _priceController = TextEditingController();
 
   Timer? _realtimePriceTimer;
 
@@ -47,6 +48,7 @@ class _StockScreenState extends State<StockScreen> {
   bool _isTrading = false;
   bool _showOnlyOwned = false;
   bool _isBuyOrder = true;
+  bool _isMarketOrder = false;
   bool _isChartLoading = false;
 
   DateTime? _lastRealtimeUpdatedAt;
@@ -60,12 +62,13 @@ class _StockScreenState extends State<StockScreen> {
 
   StockItemViewModel? _selectedMarketItem;
   double? _selectedOrderPrice;
+  double? _manualOrderPrice;
 
   String _selectedMarketFilter = '전체';
   String _selectedSort = '이름';
 
   int _tradeHistoryPage = 0;
-  static const int _tradeHistoryPageSize = 5;
+  static const int _tradeHistoryPageSize = 9;
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
@@ -77,7 +80,6 @@ class _StockScreenState extends State<StockScreen> {
 
   static const double _pageMaxWidth = 1480;
   static const double _gap = 14;
-  static const double _radius = 18;
 
   @override
   void initState() {
@@ -88,7 +90,8 @@ class _StockScreenState extends State<StockScreen> {
     _startRealtimePriceUpdate();
 
     _quantityController.addListener(() {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
     });
   }
 
@@ -96,6 +99,7 @@ class _StockScreenState extends State<StockScreen> {
   void dispose() {
     _searchController.dispose();
     _quantityController.dispose();
+    _priceController.dispose();
     _realtimePriceTimer?.cancel();
     super.dispose();
   }
@@ -116,35 +120,32 @@ class _StockScreenState extends State<StockScreen> {
   void _startRealtimePriceUpdate() {
     _realtimePriceTimer?.cancel();
 
-    _realtimePriceTimer = Timer.periodic(
-      const Duration(minutes: 5),
-          (_) async {
-        if (!mounted || _isRealtimeUpdating) return;
+    _realtimePriceTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      if (!mounted || _isRealtimeUpdating) return;
 
-        try {
-          _isRealtimeUpdating = true;
+      try {
+        _isRealtimeUpdating = true;
 
-          await _stockPriceRepository.simulateStockPrices();
+        await _stockPriceRepository.simulateStockPrices();
 
-          if (mounted) {
-            setState(() {
-              _lastRealtimeUpdatedAt = DateTime.now();
-            });
-          }
-
-          await _loadMarketItems();
-
-          final selectedItem = _selectedMarketItem;
-          if (selectedItem != null) {
-            await _loadStockChart(selectedItem.id, selectedItem.name);
-          }
-        } catch (e) {
-          debugPrint('실시간 가격 갱신 실패: $e');
-        } finally {
-          _isRealtimeUpdating = false;
+        if (mounted) {
+          setState(() {
+            _lastRealtimeUpdatedAt = DateTime.now();
+          });
         }
-      },
-    );
+
+        await _loadMarketItems();
+
+        final selectedItem = _selectedMarketItem;
+        if (selectedItem != null) {
+          await _loadStockChart(selectedItem.id, selectedItem.name);
+        }
+      } catch (e) {
+        debugPrint('실시간 가격 갱신 실패: $e');
+      } finally {
+        _isRealtimeUpdating = false;
+      }
+    });
   }
 
   Future<void> _loadMarketItems() async {
@@ -159,9 +160,7 @@ class _StockScreenState extends State<StockScreen> {
           market: _mapMarketLabel((row['market'] ?? '').toString()),
           currentPrice: ((row['current_price'] ?? 0) as num).toDouble(),
           changeRate: ((row['change_rate'] ?? 0) as num).toDouble(),
-          description: (row['market'] ?? '')
-              .toString()
-              .isEmpty
+          description: (row['market'] ?? '').toString().isEmpty
               ? ''
               : '${(row['market'] ?? '').toString()} 종목',
         );
@@ -183,8 +182,9 @@ class _StockScreenState extends State<StockScreen> {
           final selectedCode = _selectedMarketItem!.code;
 
           try {
-            _selectedMarketItem =
-                items.firstWhere((item) => item.code == selectedCode);
+            _selectedMarketItem = items.firstWhere(
+              (item) => item.code == selectedCode,
+            );
           } catch (_) {}
         }
       });
@@ -261,7 +261,8 @@ class _StockScreenState extends State<StockScreen> {
 
     try {
       final histories = await _stockTradeRepository.fetchTradeHistory(
-          _user!.id);
+        _user!.id,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -323,7 +324,14 @@ class _StockScreenState extends State<StockScreen> {
   double get _cash => (_wallet?.cashBalance ?? 0).toDouble();
 
   double get _orderPrice {
-    return _selectedOrderPrice ?? _selectedMarketItem?.currentPrice ?? 0;
+    if (_isMarketOrder) {
+      return _selectedMarketItem?.currentPrice ?? 0;
+    }
+
+    return _manualOrderPrice ??
+        _selectedOrderPrice ??
+        _selectedMarketItem?.currentPrice ??
+        0;
   }
 
   double get _totalStockValue {
@@ -437,9 +445,9 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _increaseQuantity() {
@@ -458,24 +466,52 @@ class _StockScreenState extends State<StockScreen> {
     _quantityController.text = (current - 1).toString();
   }
 
+  void _handlePriceChanged(String value) {
+    final price = double.tryParse(value.trim()) ?? 0;
+
+    setState(() {
+      _manualOrderPrice = price <= 0 ? null : price;
+      _selectedOrderPrice = _manualOrderPrice;
+    });
+  }
+
+  void _normalizeQuantity() {
+    final text = _quantityController.text.trim();
+    final quantity = int.tryParse(text) ?? 0;
+
+    if (quantity <= 0) {
+      _quantityController.text = '1';
+      _quantityController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _quantityController.text.length),
+      );
+    }
+  }
+
   void _setMaxQuantity() {
     final item = _selectedMarketItem;
 
     if (item == null) {
-      _quantityController.text = '1';
+      _quantityController.text = '';
       return;
     }
 
     if (_isBuyOrder) {
-      final int maxBuyQuantity = _orderPrice <= 0 ? 0 : (_cash / _orderPrice).floor();
-      _quantityController.text = maxBuyQuantity <= 0 ? '1' : maxBuyQuantity.toString();
+      final int maxBuyQuantity = _orderPrice <= 0
+          ? 0
+          : (_cash / _orderPrice).floor();
+
+      _quantityController.text = maxBuyQuantity <= 0
+          ? ''
+          : maxBuyQuantity.toString();
       return;
     }
 
     final holding = _findHoldingByCode(item.code);
     final int maxSellQuantity = holding?.quantity ?? 0;
 
-    _quantityController.text = maxSellQuantity <= 0 ? '1' : maxSellQuantity.toString();
+    _quantityController.text = maxSellQuantity <= 0
+        ? ''
+        : maxSellQuantity.toString();
   }
 
   Future<void> _handleBuy() async {
@@ -488,6 +524,8 @@ class _StockScreenState extends State<StockScreen> {
       _showSnackBar('매수할 종목을 선택해주세요.');
       return;
     }
+
+    _normalizeQuantity();
 
     final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
 
@@ -538,6 +576,8 @@ class _StockScreenState extends State<StockScreen> {
       _showSnackBar('매도할 종목을 선택해주세요.');
       return;
     }
+
+    _normalizeQuantity();
 
     final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
 
@@ -624,6 +664,10 @@ class _StockScreenState extends State<StockScreen> {
                     setState(() {
                       _selectedMarketItem = item;
                       _selectedOrderPrice = null;
+                      _manualOrderPrice = null;
+                      _priceController.text = item.currentPrice.toStringAsFixed(
+                        0,
+                      );
                     });
 
                     _loadStockChart(item.id, item.name);
@@ -681,6 +725,10 @@ class _StockScreenState extends State<StockScreen> {
                   setState(() {
                     _selectedMarketItem = item;
                     _selectedOrderPrice = null;
+                    _manualOrderPrice = null;
+                    _priceController.text = item.currentPrice.toStringAsFixed(
+                      0,
+                    );
                   });
 
                   _loadStockChart(item.id, item.name);
@@ -693,10 +741,7 @@ class _StockScreenState extends State<StockScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              flex: 7,
-              child: _buildBottomTradingArea(),
-            ),
+            Expanded(flex: 7, child: _buildBottomTradingArea()),
             const SizedBox(width: _gap),
             Expanded(
               flex: 3,
@@ -706,13 +751,32 @@ class _StockScreenState extends State<StockScreen> {
                     ? null
                     : _findHoldingByCode(_selectedMarketItem!.code),
                 quantityController: _quantityController,
+                priceController: _priceController,
                 orderPrice: _orderPrice,
                 cash: _cash,
                 isBuyOrder: _isBuyOrder,
+                isMarketOrder: _isMarketOrder,
                 isTrading: _isTrading,
                 onChangeOrderType: (isBuy) {
                   setState(() {
                     _isBuyOrder = isBuy;
+                    _quantityController.text = '1';
+                  });
+                },
+                onChangeOrderMode: (isMarket) {
+                  setState(() {
+                    _isMarketOrder = isMarket;
+
+                    if (isMarket) {
+                      _manualOrderPrice = null;
+                      _selectedOrderPrice = null;
+                      _priceController.clear();
+                    } else if (_selectedMarketItem != null) {
+                      _manualOrderPrice = _selectedMarketItem!.currentPrice;
+                      _selectedOrderPrice = _selectedMarketItem!.currentPrice;
+                      _priceController.text = _selectedMarketItem!.currentPrice
+                          .toStringAsFixed(0);
+                    }
                   });
                 },
                 onDecreaseQuantity: _decreaseQuantity,
@@ -720,6 +784,7 @@ class _StockScreenState extends State<StockScreen> {
                 onSetMaxQuantity: _setMaxQuantity,
                 onBuy: _handleBuy,
                 onSell: _handleSell,
+                onPriceChanged: _handlePriceChanged,
               ),
             ),
           ],
@@ -740,6 +805,9 @@ class _StockScreenState extends State<StockScreen> {
             onSelectPrice: (price) {
               setState(() {
                 _selectedOrderPrice = price;
+                _manualOrderPrice = price;
+                _priceController.text = price.toStringAsFixed(0);
+                _isMarketOrder = false;
               });
             },
           ),

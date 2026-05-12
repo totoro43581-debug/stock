@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter/services.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
 import 'package:stock/feature/stock/model/stock_item_view_model.dart';
 
@@ -8,11 +8,13 @@ class StockTradePanelSection extends StatelessWidget {
   final StockHoldingModel? selectedHolding;
 
   final TextEditingController quantityController;
+  final TextEditingController priceController;
 
   final double orderPrice;
   final double cash;
 
   final bool isBuyOrder;
+  final bool isMarketOrder;
   final bool isTrading;
 
   final VoidCallback onDecreaseQuantity;
@@ -23,15 +25,19 @@ class StockTradePanelSection extends StatelessWidget {
   final VoidCallback onSell;
 
   final ValueChanged<bool> onChangeOrderType;
+  final ValueChanged<bool> onChangeOrderMode;
+  final ValueChanged<String> onPriceChanged;
 
   const StockTradePanelSection({
     super.key,
     required this.selectedItem,
     required this.selectedHolding,
     required this.quantityController,
+    required this.priceController,
     required this.orderPrice,
     required this.cash,
     required this.isBuyOrder,
+    required this.isMarketOrder,
     required this.isTrading,
     required this.onDecreaseQuantity,
     required this.onIncreaseQuantity,
@@ -39,6 +45,8 @@ class StockTradePanelSection extends StatelessWidget {
     required this.onBuy,
     required this.onSell,
     required this.onChangeOrderType,
+    required this.onChangeOrderMode,
+    required this.onPriceChanged,
   });
 
   @override
@@ -49,13 +57,41 @@ class StockTradePanelSection extends StatelessWidget {
     final total = (orderPrice * quantity).round();
     final afterCash = (cash - total).round();
 
-    final int maxBuyQuantity = orderPrice <= 0 ? 0 : (cash / orderPrice).floor();
+    final int maxBuyQuantity = orderPrice <= 0
+        ? 0
+        : (cash / orderPrice).floor();
     final int holdingQuantity = selectedHolding?.quantity ?? 0;
     final int maxOrderQuantity = isBuyOrder ? maxBuyQuantity : holdingQuantity;
 
+    final bool hasSelectedItem = item != null;
+    final bool isQuantityValid = quantity > 0;
+    final bool isPriceValid = orderPrice > 0;
+    final bool isBuyCashEnough = total <= cash;
+    final bool isSellQuantityEnough = quantity <= holdingQuantity;
+
+    final bool canSubmit =
+        hasSelectedItem &&
+        isQuantityValid &&
+        isPriceValid &&
+        (isBuyOrder ? isBuyCashEnough : isSellQuantityEnough);
+
+    String? warningMessage;
+
+    if (!hasSelectedItem) {
+      warningMessage = '종목을 선택해주세요.';
+    } else if (!isPriceValid) {
+      warningMessage = '주문가격을 입력해주세요.';
+    } else if (!isQuantityValid) {
+      warningMessage = '수량은 1주 이상 입력해주세요.';
+    } else if (isBuyOrder && !isBuyCashEnough) {
+      warningMessage = '보유현금이 부족합니다.';
+    } else if (!isBuyOrder && !isSellQuantityEnough) {
+      warningMessage = '보유수량이 부족합니다.';
+    }
+
     return Container(
-      height: 540,
-      padding: const EdgeInsets.all(16),
+      height: 580,
+      padding: const EdgeInsets.all(12),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,14 +105,9 @@ class StockTradePanelSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
           Row(
             children: [
-              _buildOrderTab(
-                label: '매수',
-                selected: isBuyOrder,
-                isBuyTab: true,
-              ),
+              _buildOrderTab(label: '매수', selected: isBuyOrder, isBuyTab: true),
               const SizedBox(width: 8),
               _buildOrderTab(
                 label: '매도',
@@ -85,18 +116,30 @@ class StockTradePanelSection extends StatelessWidget {
               ),
             ],
           ),
-
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildOrderModeTab(
+                label: '지정가',
+                selected: !isMarketOrder,
+                isMarket: false,
+              ),
+              const SizedBox(width: 8),
+              _buildOrderModeTab(
+                label: '시장가',
+                selected: isMarketOrder,
+                isMarket: true,
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
-
           _buildOrderLimitBox(
             isBuyOrder: isBuyOrder,
             cash: cash,
             holdingQuantity: holdingQuantity,
             maxOrderQuantity: maxOrderQuantity,
           ),
-
           const SizedBox(height: 12),
-
           const Text(
             '주문가격',
             style: TextStyle(
@@ -106,28 +149,53 @@ class StockTradePanelSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-
-          Container(
+          SizedBox(
             height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: Text(
-              item == null ? '-' : '₩ ${_formatPrice(orderPrice)}',
+            child: TextField(
+              controller: priceController,
+              enabled: !isMarketOrder && item != null,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: onPriceChanged,
+              textAlign: TextAlign.right,
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w900,
                 color: Color(0xFF111827),
               ),
+              decoration: InputDecoration(
+                prefixText: isMarketOrder ? null : '₩ ',
+                hintText: item == null
+                    ? '-'
+                    : isMarketOrder
+                    ? '시장가 · ₩ ${_formatPrice(orderPrice)}'
+                    : '지정가 입력',
+                hintStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF94A3B8),
+                ),
+                filled: true,
+                fillColor: isMarketOrder
+                    ? const Color(0xFFF1F5F9)
+                    : const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(11),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(11),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(11),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+              ),
             ),
           ),
-
           const SizedBox(height: 12),
-
           const Text(
             '수량',
             style: TextStyle(
@@ -137,7 +205,6 @@ class StockTradePanelSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-
           Row(
             children: [
               Expanded(
@@ -146,6 +213,7 @@ class StockTradePanelSection extends StatelessWidget {
                   child: TextField(
                     controller: quantityController,
                     keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 13,
@@ -172,12 +240,10 @@ class StockTradePanelSection extends StatelessWidget {
               _buildMaxButton(onSetMaxQuantity),
             ],
           ),
-
-          const SizedBox(height: 14),
-
+          const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(12),
@@ -191,7 +257,7 @@ class StockTradePanelSection extends StatelessWidget {
                   item == null ? '-' : '₩ ${_formatPrice(item.currentPrice)}',
                 ),
                 _buildOrderInfoRow(
-                  '선택가',
+                  isMarketOrder ? '시장가' : '지정가',
                   item == null ? '-' : '₩ ${_formatPrice(orderPrice)}',
                 ),
                 _buildOrderInfoRow('수량', '$quantity주'),
@@ -206,14 +272,32 @@ class StockTradePanelSection extends StatelessWidget {
               ],
             ),
           ),
-
-          const Spacer(),
-
+          if (warningMessage != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Text(
+                warningMessage,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFFB91C1C),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 42,
             child: ElevatedButton(
-              onPressed: isTrading
+              onPressed: isTrading || !canSubmit
                   ? null
                   : isBuyOrder
                   ? onBuy
@@ -242,6 +326,84 @@ class StockTradePanelSection extends StatelessWidget {
     );
   }
 
+  Widget _buildOrderTab({
+    required String label,
+    required bool selected,
+    required bool isBuyTab,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          onChangeOrderType(isBuyTab);
+        },
+        borderRadius: BorderRadius.circular(11),
+        child: Container(
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? isBuyTab
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFFDC2626)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(
+              color: selected
+                  ? isBuyTab
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFDC2626)
+                  : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: selected ? Colors.white : const Color(0xFF111827),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderModeTab({
+    required String label,
+    required bool selected,
+    required bool isMarket,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          onChangeOrderMode(isMarket);
+        },
+        borderRadius: BorderRadius.circular(11),
+        child: Container(
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF111827) : Colors.white,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF111827)
+                  : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              color: selected ? Colors.white : const Color(0xFF111827),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildOrderLimitBox({
     required bool isBuyOrder,
     required double cash,
@@ -250,7 +412,7 @@ class StockTradePanelSection extends StatelessWidget {
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: isBuyOrder ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
         borderRadius: BorderRadius.circular(12),
@@ -273,52 +435,7 @@ class StockTradePanelSection extends StatelessWidget {
     );
   }
 
-  Widget _buildOrderTab({
-    required String label,
-    required bool selected,
-    required bool isBuyTab,
-  }) {
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          onChangeOrderType(isBuyTab);
-        },
-        borderRadius: BorderRadius.circular(11),
-        child: Container(
-          height: 36,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected
-                ? isBuyTab
-                ? const Color(0xFF16A34A)
-                : const Color(0xFFDC2626)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(
-              color: selected
-                  ? isBuyTab
-                  ? const Color(0xFF16A34A)
-                  : const Color(0xFFDC2626)
-                  : const Color(0xFFE5E7EB),
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              color: selected ? Colors.white : const Color(0xFF111827),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuantityButton(
-      String label,
-      VoidCallback onPressed,
-      ) {
+  Widget _buildQuantityButton(String label, VoidCallback onPressed) {
     return SizedBox(
       width: 42,
       height: 42,
@@ -333,10 +450,7 @@ class StockTradePanelSection extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-          ),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
         ),
       ),
     );
@@ -357,21 +471,15 @@ class StockTradePanelSection extends StatelessWidget {
         ),
         child: const Text(
           '최대',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-          ),
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
         ),
       ),
     );
   }
 
-  Widget _buildOrderInfoRow(
-      String title,
-      String value,
-      ) {
+  Widget _buildOrderInfoRow(String title, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
+      padding: const EdgeInsets.only(bottom: 7),
       child: Row(
         children: [
           Expanded(
@@ -413,9 +521,8 @@ class StockTradePanelSection extends StatelessWidget {
   }
 
   String _formatPrice(num value) {
-    return value.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-          (match) => ',',
-    );
+    return value
+        .toStringAsFixed(0)
+        .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',');
   }
 }

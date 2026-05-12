@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-
 import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
 
 class StockTradeHistorySection extends StatelessWidget {
@@ -23,8 +22,9 @@ class StockTradeHistorySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalCount = tradeHistoryItems.length;
-    final totalPages =
-    totalCount == 0 ? 1 : (totalCount / tradeHistoryPageSize).ceil();
+    final totalPages = totalCount == 0
+        ? 1
+        : (totalCount / tradeHistoryPageSize).ceil();
 
     final safePage = tradeHistoryPage.clamp(0, totalPages - 1);
     final startIndex = safePage * tradeHistoryPageSize;
@@ -35,7 +35,7 @@ class StockTradeHistorySection extends StatelessWidget {
         : tradeHistoryItems.sublist(startIndex, endIndex);
 
     return Container(
-      height: 540,
+      height: 580,
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(),
       child: Column(
@@ -68,20 +68,23 @@ class StockTradeHistorySection extends StatelessWidget {
           Expanded(
             child: pageItems.isEmpty
                 ? Center(
-              child: Text(
-                isLoggedIn ? '거래내역이 없습니다.' : '로그인 후 표시됩니다.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-            )
+                    child: Text(
+                      isLoggedIn ? '거래내역이 없습니다.' : '로그인 후 표시됩니다.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  )
                 : Column(
-              children: pageItems
-                  .map((item) => _buildTradeHistoryRow(item))
-                  .toList(),
-            ),
+                    children: pageItems
+                        .map((item) => _buildTradeHistoryRow(item))
+                        .toList(),
+                  ),
           ),
+
+          const SizedBox(height: 10),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -120,12 +123,10 @@ class StockTradeHistorySection extends StatelessWidget {
     final tradeLabel = isBuy ? '매수' : '매도';
 
     return Container(
-      height: 74,
+      height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF1F5F9)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
       ),
       child: Row(
         children: [
@@ -147,10 +148,7 @@ class StockTradeHistorySection extends StatelessWidget {
               item.stockName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
             ),
           ),
           SizedBox(
@@ -174,10 +172,7 @@ class StockTradeHistorySection extends StatelessWidget {
             child: Text(
               _formatDateTime(item.createdAt),
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xFF94A3B8),
-              ),
+              style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
             ),
           ),
         ],
@@ -196,10 +191,7 @@ class StockTradeHistorySection extends StatelessWidget {
         onPressed: enabled ? onPressed : null,
         child: Text(
           label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-          ),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
         ),
       ),
     );
@@ -221,10 +213,9 @@ class StockTradeHistorySection extends StatelessWidget {
   }
 
   String _formatPrice(num value) {
-    return value.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-          (match) => ',',
-    );
+    return value
+        .toStringAsFixed(0)
+        .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',');
   }
 
   String _formatDateTime(DateTime? value) {

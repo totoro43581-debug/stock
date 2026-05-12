@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'package:stock/feature/stock/model/stock_item_view_model.dart';
 
 class StockOrderBookSection extends StatelessWidget {
@@ -20,16 +19,13 @@ class StockOrderBookSection extends StatelessWidget {
 
     if (item == null) {
       return Container(
-        height: 540,
+        height: 580,
         padding: const EdgeInsets.all(16),
         decoration: _cardDecoration(),
         child: const Center(
           child: Text(
             '호가를 표시할 종목을 선택해주세요.',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-            ),
+            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
           ),
         ),
       );
@@ -39,7 +35,7 @@ class StockOrderBookSection extends StatelessWidget {
     final bidPrices = _buildBidPrices(item.currentPrice);
 
     return Container(
-      height: 540,
+      height: 580,
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(),
       child: Column(
@@ -122,10 +118,7 @@ class StockOrderBookSection extends StatelessWidget {
               ? const Color(0xFFFFF1F2)
               : const Color(0xFFEFF6FF),
           border: const Border(
-            bottom: BorderSide(
-              color: Color(0xFFFFFFFF),
-              width: 1,
-            ),
+            bottom: BorderSide(color: Color(0xFFFFFFFF), width: 1),
           ),
         ),
         child: Row(
@@ -187,9 +180,7 @@ class StockOrderBookSection extends StatelessWidget {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(
-        color: const Color(0xFFE5E7EB),
-      ),
+      border: Border.all(color: const Color(0xFFE5E7EB)),
       boxShadow: const [
         BoxShadow(
           color: Color(0x06000000),
@@ -201,9 +192,8 @@ class StockOrderBookSection extends StatelessWidget {
   }
 
   String _formatPrice(num value) {
-    return value.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-          (match) => ',',
-    );
+    return value
+        .toStringAsFixed(0)
+        .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',');
   }
 }
