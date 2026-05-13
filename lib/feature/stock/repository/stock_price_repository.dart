@@ -17,8 +17,8 @@ class StockPriceRepository {
         .toList();
   }
 
-  // 기존 유지
+  // 수정8차: 가상거래량 기반 가격변동
   Future<void> simulateStockPrices() async {
-    await _client.rpc('simulate_stock_prices');
+    await _client.rpc('simulate_stock_prices_by_virtual_volume');
   }
 }

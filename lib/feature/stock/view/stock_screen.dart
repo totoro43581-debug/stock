@@ -5,6 +5,7 @@ import 'package:stock/feature/quest/service/daily_quest_service.dart';
 import 'package:stock/feature/stock/model/stock_candle_model.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
 import 'package:stock/feature/stock/model/stock_item_view_model.dart';
+import 'package:stock/feature/stock/model/stock_pending_order_model.dart';
 import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
 import 'package:stock/feature/stock/repository/stock_price_repository.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
@@ -15,6 +16,7 @@ import 'package:stock/feature/stock/view/widget/stock_header_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_holding_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_market_list_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_order_book_section.dart';
+import 'package:stock/feature/stock/view/widget/stock_pending_order_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_summary_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_trade_history_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_trade_panel_section.dart';
@@ -59,6 +61,7 @@ class _StockScreenState extends State<StockScreen> {
   List<StockHoldingModel> _holdingItems = [];
   List<StockTradeHistoryModel> _tradeHistoryItems = [];
   List<StockCandleModel> _selectedStockPrices = [];
+  List<StockPendingOrderModel> _pendingOrderItems = [];
 
   StockItemViewModel? _selectedMarketItem;
   double? _selectedOrderPrice;
@@ -115,6 +118,7 @@ class _StockScreenState extends State<StockScreen> {
     await _loadWallet();
     await _loadHoldings();
     await _loadTradeHistory();
+    await _loadPendingOrders();
   }
 
   void _startRealtimePriceUpdate() {
@@ -127,6 +131,21 @@ class _StockScreenState extends State<StockScreen> {
         _isRealtimeUpdating = true;
 
         await _stockPriceRepository.simulateStockPrices();
+
+        final beforeCount = _pendingOrderItems.length;
+
+        await _stockTradeRepository.processPendingOrders();
+
+        await _loadWallet();
+        await _loadHoldings();
+        await _loadTradeHistory();
+        await _loadPendingOrders();
+
+        final afterCount = _pendingOrderItems.length;
+
+        if (mounted && beforeCount > afterCount) {
+          _showSnackBar('지정가 주문이 체결되었습니다.');
+        }
 
         if (mounted) {
           setState(() {
@@ -183,7 +202,7 @@ class _StockScreenState extends State<StockScreen> {
 
           try {
             _selectedMarketItem = items.firstWhere(
-              (item) => item.code == selectedCode,
+                  (item) => item.code == selectedCode,
             );
           } catch (_) {}
         }
@@ -275,6 +294,48 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  Future<void> _loadPendingOrders() async {
+    if (!_isLoggedIn || _user == null) {
+      if (!mounted) return;
+      setState(() {
+        _pendingOrderItems = [];
+      });
+      return;
+    }
+
+    try {
+      final orders = await _stockTradeRepository.fetchPendingOrders(_user!.id);
+
+      if (!mounted) return;
+      setState(() {
+        _pendingOrderItems = orders;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('미체결 주문을 불러오지 못했습니다: $e');
+    }
+  }
+
+  Future<void> _cancelPendingOrder(String orderId) async {
+    if (_user == null) {
+      _showSnackBar('로그인이 필요합니다.');
+      return;
+    }
+
+    try {
+      await _stockTradeRepository.cancelPendingOrder(
+        userId: _user!.id,
+        orderId: orderId,
+      );
+
+      await _loadPendingOrders();
+
+      _showSnackBar('주문이 취소되었습니다.');
+    } catch (e) {
+      _showSnackBar('주문 취소 실패: $e');
+    }
+  }
+
   Future<void> _loadStockChart(String stockId, String stockName) async {
     setState(() {
       _isChartLoading = true;
@@ -305,6 +366,33 @@ class _StockScreenState extends State<StockScreen> {
     await _loadWallet();
     await _loadHoldings();
     await _loadTradeHistory();
+    await _loadPendingOrders();
+  }
+
+  Future<void> _processPendingOrdersManually() async {
+    final beforeCount = _pendingOrderItems.length;
+
+    try {
+      await _stockTradeRepository.processPendingOrders();
+
+      await _loadWallet();
+      await _loadHoldings();
+      await _loadTradeHistory();
+      await _loadPendingOrders();
+
+      final afterCount = _pendingOrderItems.length;
+
+      if (!mounted) return;
+
+      if (beforeCount > afterCount) {
+        _showSnackBar('지정가 주문이 체결되었습니다.');
+      } else {
+        _showSnackBar('체결 가능한 지정가 주문이 없습니다.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('지정가 체결 확인 실패: $e');
+    }
   }
 
   String _mapMarketLabel(String market) {
@@ -543,18 +631,34 @@ class _StockScreenState extends State<StockScreen> {
 
       final item = _selectedMarketItem!;
 
-      await _stockTradeRepository.buyStock(
-        userId: _user!.id,
-        stockCode: item.code,
-        stockName: item.name,
-        price: _orderPrice,
-        quantity: quantity,
-      );
+      if (_isMarketOrder) {
+        await _stockTradeRepository.buyStock(
+          userId: _user!.id,
+          stockCode: item.code,
+          stockName: item.name,
+          price: _orderPrice,
+          quantity: quantity,
+        );
 
-      await _reloadAfterTrade();
+        await _reloadAfterTrade();
 
-      if (!mounted) return;
-      _showSnackBar('매수 완료: ${item.name} ${quantity}주');
+        if (!mounted) return;
+        _showSnackBar('시장가 매수 완료: ${item.name} ${quantity}주');
+      } else {
+        await _stockTradeRepository.createPendingOrder(
+          userId: _user!.id,
+          stockCode: item.code,
+          stockName: item.name,
+          orderType: 'buy',
+          orderPrice: _orderPrice,
+          quantity: quantity,
+        );
+
+        await _loadPendingOrders();
+
+        if (!mounted) return;
+        _showSnackBar('지정가 매수 주문 등록: ${item.name} ${quantity}주');
+      }
     } catch (e) {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
@@ -595,18 +699,34 @@ class _StockScreenState extends State<StockScreen> {
 
       final item = _selectedMarketItem!;
 
-      await _stockTradeRepository.sellStock(
-        userId: _user!.id,
-        stockCode: item.code,
-        stockName: item.name,
-        price: _orderPrice,
-        quantity: quantity,
-      );
+      if (_isMarketOrder) {
+        await _stockTradeRepository.sellStock(
+          userId: _user!.id,
+          stockCode: item.code,
+          stockName: item.name,
+          price: _orderPrice,
+          quantity: quantity,
+        );
 
-      await _reloadAfterTrade();
+        await _reloadAfterTrade();
 
-      if (!mounted) return;
-      _showSnackBar('매도 완료: ${item.name} ${quantity}주');
+        if (!mounted) return;
+        _showSnackBar('시장가 매도 완료: ${item.name} ${quantity}주');
+      } else {
+        await _stockTradeRepository.createPendingOrder(
+          userId: _user!.id,
+          stockCode: item.code,
+          stockName: item.name,
+          orderType: 'sell',
+          orderPrice: _orderPrice,
+          quantity: quantity,
+        );
+
+        await _loadPendingOrders();
+
+        if (!mounted) return;
+        _showSnackBar('지정가 매도 주문 등록: ${item.name} ${quantity}주');
+      }
     } catch (e) {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
@@ -655,6 +775,12 @@ class _StockScreenState extends State<StockScreen> {
                 ),
                 const SizedBox(height: _gap),
                 _buildTradingLayout(filteredItems),
+                const SizedBox(height: _gap),
+                StockPendingOrderSection(
+                  pendingOrders: _pendingOrderItems,
+                  isLoggedIn: _isLoggedIn,
+                  onCancelOrder: _cancelPendingOrder,
+                ),
                 const SizedBox(height: _gap),
                 StockHoldingSection(
                   holdingItems: _holdingItems,
