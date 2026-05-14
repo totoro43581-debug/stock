@@ -120,8 +120,8 @@ class StockMarketListSection extends StatelessWidget {
                 value: selectedMarketFilter,
                 items: const [
                   '전체',
-                  '국내',
-                  '해외',
+                  '국내주식',
+                  '해외주식',
                   'ETF',
                   '테마주',
                 ],
@@ -136,6 +136,7 @@ class StockMarketListSection extends StatelessWidget {
                   '이름',
                   '현재가',
                   '등락률',
+                  '거래량',
                 ],
                 onChanged: onSortChanged,
               ),
@@ -195,7 +196,7 @@ class StockMarketListSection extends StatelessWidget {
         onSelectItem(item);
       },
       child: Container(
-        height: 54,
+        height: 66,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         color: selected ? const Color(0xFFEFF6FF) : Colors.white,
         child: Row(
@@ -232,6 +233,15 @@ class StockMarketListSection extends StatelessWidget {
                       color: Color(0xFF94A3B8),
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '거래량 ${_formatVolume(item.tradeVolume)}',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -254,6 +264,15 @@ class StockMarketListSection extends StatelessWidget {
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     color: _changeColor(item.changeRate),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '대금 ${_formatTradeAmount(item.tradeAmount)}',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF64748B),
                   ),
                 ),
               ],
@@ -307,5 +326,24 @@ class StockMarketListSection extends StatelessWidget {
   String _formatSignedPercent(double value) {
     final prefix = value > 0 ? '+' : '';
     return '$prefix${value.toStringAsFixed(2)}%';
+  }
+
+  String _formatVolume(int value) {
+    return value.toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+          (match) => ',',
+    );
+  }
+
+  String _formatTradeAmount(double value) {
+    if (value >= 100000000) {
+      return '${(value / 100000000).toStringAsFixed(1)}억';
+    }
+
+    if (value >= 10000) {
+      return '${(value / 10000).toStringAsFixed(0)}만';
+    }
+
+    return value.toStringAsFixed(0);
   }
 }

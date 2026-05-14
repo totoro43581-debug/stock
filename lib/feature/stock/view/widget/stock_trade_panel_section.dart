@@ -144,7 +144,7 @@ class StockTradePanelSection extends StatelessWidget {
           const Text(
             '주문가격',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
               color: Color(0xFF64748B),
             ),
@@ -203,7 +203,7 @@ class StockTradePanelSection extends StatelessWidget {
           const Text(
             '수량',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
               color: Color(0xFF64748B),
             ),
@@ -222,14 +222,14 @@ class StockTradePanelSection extends StatelessWidget {
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),
                     decoration: InputDecoration(
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 10,
+                        vertical: 12,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(11),
@@ -247,11 +247,11 @@ class StockTradePanelSection extends StatelessWidget {
             ],
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(12),
@@ -281,7 +281,7 @@ class StockTradePanelSection extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
           _buildStatusBox(
             canSubmit: canSubmit,
@@ -359,7 +359,7 @@ class StockTradePanelSection extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      height: 28,
+      height: 36,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: bgColor,
@@ -369,7 +369,7 @@ class StockTradePanelSection extends StatelessWidget {
       child: Text(
         statusText,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: FontWeight.w900,
           color: textColor,
         ),
@@ -443,7 +443,7 @@ class StockTradePanelSection extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w900,
               color: selected ? Colors.white : const Color(0xFF111827),
             ),
@@ -461,10 +461,10 @@ class StockTradePanelSection extends StatelessWidget {
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isBuyOrder ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isBuyOrder ? const Color(0xFFBBF7D0) : const Color(0xFFFECACA),
         ),

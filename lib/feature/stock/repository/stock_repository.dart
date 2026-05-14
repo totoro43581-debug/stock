@@ -9,7 +9,9 @@ class StockRepository {
   Future<List<Map<String, dynamic>>> fetchActiveStocks() async {
     final response = await _client
         .from('stock_item')
-        .select('id, code, name, market, current_price, change_rate')
+        .select(
+      'id, code, name, market, current_price, change_rate, virtual_buy_volume, virtual_sell_volume, trade_volume, trade_amount',
+    )
         .eq('is_active', true)
         .order('market', ascending: true)
         .order('name', ascending: true);

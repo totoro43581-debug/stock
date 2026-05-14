@@ -179,6 +179,10 @@ class _StockScreenState extends State<StockScreen> {
           market: _mapMarketLabel((row['market'] ?? '').toString()),
           currentPrice: ((row['current_price'] ?? 0) as num).toDouble(),
           changeRate: ((row['change_rate'] ?? 0) as num).toDouble(),
+          virtualBuyVolume: ((row['virtual_buy_volume'] ?? 0) as num).toInt(),
+          virtualSellVolume: ((row['virtual_sell_volume'] ?? 0) as num).toInt(),
+          tradeVolume: ((row['trade_volume'] ?? 0) as num).toInt(),
+          tradeAmount: ((row['trade_amount'] ?? 0) as num).toDouble(),
           description: (row['market'] ?? '').toString().isEmpty
               ? ''
               : '${(row['market'] ?? '').toString()} 종목',
@@ -518,6 +522,9 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     switch (_selectedSort) {
+      case '거래량':
+        result.sort((a, b) => b.tradeVolume.compareTo(a.tradeVolume));
+        break;
       case '등락률':
         result.sort((a, b) => b.changeRate.compareTo(a.changeRate));
         break;
