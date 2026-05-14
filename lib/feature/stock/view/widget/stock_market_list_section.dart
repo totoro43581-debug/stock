@@ -1,9 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
 import 'package:stock/feature/stock/model/stock_item_view_model.dart';
 
-class StockMarketListSection extends StatelessWidget {
+class StockMarketListSection extends StatefulWidget {
   final List<StockItemViewModel> items;
   final StockItemViewModel? selectedItem;
   final List<StockHoldingModel> holdings;
@@ -30,6 +31,19 @@ class StockMarketListSection extends StatelessWidget {
   });
 
   @override
+  State<StockMarketListSection> createState() => _StockMarketListSectionState();
+}
+
+class _StockMarketListSectionState extends State<StockMarketListSection> {
+  final ScrollController _marketListScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _marketListScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       height: 520,
@@ -50,7 +64,7 @@ class StockMarketListSection extends StatelessWidget {
           _buildFilterCompact(),
           const SizedBox(height: 10),
           Expanded(
-            child: items.isEmpty
+            child: widget.items.isEmpty
                 ? const Center(
               child: Text(
                 '조건에 맞는 종목이 없습니다.',
@@ -60,17 +74,48 @@ class StockMarketListSection extends StatelessWidget {
                 ),
               ),
             )
-                : ListView.separated(
-              itemCount: items.length,
-              separatorBuilder: (_, __) {
-                return const Divider(
-                  height: 1,
-                  color: Color(0xFFF1F5F9),
+                : Listener(
+              onPointerSignal: (event) {
+                if (event is! PointerScrollEvent) return;
+                if (!_marketListScrollController.hasClients) return;
+
+                GestureBinding.instance.pointerSignalResolver.register(
+                  event,
+                      (PointerSignalEvent resolvedEvent) {
+                    if (resolvedEvent is! PointerScrollEvent) return;
+                    if (!_marketListScrollController.hasClients) return;
+
+                    final position =
+                        _marketListScrollController.position;
+
+                    final nextOffset =
+                    (position.pixels + resolvedEvent.scrollDelta.dy)
+                        .clamp(
+                      position.minScrollExtent,
+                      position.maxScrollExtent,
+                    );
+
+                    _marketListScrollController.jumpTo(
+                      nextOffset.toDouble(),
+                    );
+                  },
                 );
               },
-              itemBuilder: (context, index) {
-                return _buildMarketListRow(items[index]);
-              },
+              child: ListView.separated(
+                controller: _marketListScrollController,
+                primary: false,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: widget.items.length,
+                separatorBuilder: (_, __) {
+                  return const Divider(
+                    height: 1,
+                    color: Color(0xFFF1F5F9),
+                  );
+                },
+                itemBuilder: (context, index) {
+                  return _buildMarketListRow(widget.items[index]);
+                },
+              ),
             ),
           ),
         ],
@@ -84,8 +129,8 @@ class StockMarketListSection extends StatelessWidget {
         SizedBox(
           height: 38,
           child: TextField(
-            controller: searchController,
-            onChanged: (_) => onSearchChanged(),
+            controller: widget.searchController,
+            onChanged: (_) => widget.onSearchChanged(),
             style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(
               hintText: '종목명 / 코드 검색',
@@ -117,7 +162,7 @@ class StockMarketListSection extends StatelessWidget {
           children: [
             Expanded(
               child: _buildSmallSelect(
-                value: selectedMarketFilter,
+                value: widget.selectedMarketFilter,
                 items: const [
                   '전체',
                   '국내주식',
@@ -125,20 +170,21 @@ class StockMarketListSection extends StatelessWidget {
                   'ETF',
                   '테마주',
                 ],
-                onChanged: onMarketChanged,
+                onChanged: widget.onMarketChanged,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _buildSmallSelect(
-                value: selectedSort,
+                value: widget.selectedSort,
                 items: const [
                   '이름',
                   '현재가',
                   '등락률',
                   '거래량',
+                  '거래대금',
                 ],
-                onChanged: onSortChanged,
+                onChanged: widget.onSortChanged,
               ),
             ),
           ],
@@ -185,18 +231,16 @@ class StockMarketListSection extends StatelessWidget {
   }
 
   Widget _buildMarketListRow(StockItemViewModel item) {
-    final selected = selectedItem?.code == item.code;
-
+    final selected = widget.selectedItem?.code == item.code;
     final holding = _findHoldingByCode(item.code);
-
     final holdingQty = holding?.quantity ?? 0;
 
     return InkWell(
       onTap: () {
-        onSelectItem(item);
+        widget.onSelectItem(item);
       },
       child: Container(
-        height: 66,
+        height: 82,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         color: selected ? const Color(0xFFEFF6FF) : Colors.white,
         child: Row(
@@ -233,13 +277,25 @@ class StockMarketListSection extends StatelessWidget {
                       color: Color(0xFF94A3B8),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     '거래량 ${_formatVolume(item.tradeVolume)}',
                     style: const TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '체결강도 ${_formatTradeStrength(item.virtualBuyVolume, item.virtualSellVolume)}',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: _tradeStrengthColor(
+                        item.virtualBuyVolume,
+                        item.virtualSellVolume,
+                      ),
                     ),
                   ),
                 ],
@@ -285,7 +341,7 @@ class StockMarketListSection extends StatelessWidget {
 
   StockHoldingModel? _findHoldingByCode(String code) {
     try {
-      return holdings.firstWhere(
+      return widget.holdings.firstWhere(
             (item) => item.stockCode == code,
       );
     } catch (_) {
@@ -345,5 +401,32 @@ class StockMarketListSection extends StatelessWidget {
     }
 
     return value.toStringAsFixed(0);
+  }
+
+  String _formatTradeStrength(int buyVolume, int sellVolume) {
+    if (sellVolume <= 0) {
+      return '0%';
+    }
+
+    final strength = (buyVolume / sellVolume) * 100;
+    return '${strength.toStringAsFixed(0)}%';
+  }
+
+  Color _tradeStrengthColor(int buyVolume, int sellVolume) {
+    if (sellVolume <= 0) {
+      return const Color(0xFF64748B);
+    }
+
+    final strength = (buyVolume / sellVolume) * 100;
+
+    if (strength >= 120) {
+      return const Color(0xFFDC2626);
+    }
+
+    if (strength <= 80) {
+      return const Color(0xFF2563EB);
+    }
+
+    return const Color(0xFF64748B);
   }
 }

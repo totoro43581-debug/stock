@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:stock/feature/stock/model/stock_item_view_model.dart';
 
@@ -25,7 +27,10 @@ class StockOrderBookSection extends StatelessWidget {
         child: const Center(
           child: Text(
             '호가를 표시할 종목을 선택해주세요.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF64748B),
+            ),
           ),
         ),
       );
@@ -53,16 +58,20 @@ class StockOrderBookSection extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                for (final price in askPrices)
+                for (int i = 0; i < askPrices.length; i++)
                   Expanded(
                     child: _buildOrderBookRow(
                       label: '매도',
-                      price: price,
+                      price: askPrices[i],
+                      quantity: _buildAskQuantity(
+                        item.tradeVolume,
+                        i,
+                      ),
                       isAsk: true,
                     ),
                   ),
                 Container(
-                  height: 34,
+                  height: 36,
                   alignment: Alignment.center,
                   decoration: const BoxDecoration(
                     color: Color(0xFFF8FAFC),
@@ -80,11 +89,15 @@ class StockOrderBookSection extends StatelessWidget {
                     ),
                   ),
                 ),
-                for (final price in bidPrices)
+                for (int i = 0; i < bidPrices.length; i++)
                   Expanded(
                     child: _buildOrderBookRow(
                       label: '매수',
-                      price: price,
+                      price: bidPrices[i],
+                      quantity: _buildBidQuantity(
+                        item.tradeVolume,
+                        i,
+                      ),
                       isAsk: false,
                     ),
                   ),
@@ -99,11 +112,14 @@ class StockOrderBookSection extends StatelessWidget {
   Widget _buildOrderBookRow({
     required String label,
     required double price,
+    required int quantity,
     required bool isAsk,
   }) {
     final selected = selectedOrderPrice?.round() == price.round();
-    final fakeQty = (price.round().abs() % 17) + 1;
-    final color = isAsk ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
+
+    final color = isAsk
+        ? const Color(0xFFDC2626)
+        : const Color(0xFF2563EB);
 
     return InkWell(
       onTap: () {
@@ -118,7 +134,10 @@ class StockOrderBookSection extends StatelessWidget {
               ? const Color(0xFFFFF1F2)
               : const Color(0xFFEFF6FF),
           border: const Border(
-            bottom: BorderSide(color: Color(0xFFFFFFFF), width: 1),
+            bottom: BorderSide(
+              color: Color(0xFFFFFFFF),
+              width: 1,
+            ),
           ),
         ),
         child: Row(
@@ -147,9 +166,9 @@ class StockOrderBookSection extends StatelessWidget {
             ),
             const SizedBox(width: 14),
             SizedBox(
-              width: 42,
+              width: 52,
               child: Text(
-                '$fakeQty주',
+                '${_formatQty(quantity)}주',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
                   fontSize: 10,
@@ -162,6 +181,24 @@ class StockOrderBookSection extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  int _buildAskQuantity(int tradeVolume, int level) {
+    final random = Random();
+
+    final base =
+    max((tradeVolume * (8 - level) ~/ 30), 5);
+
+    return base + random.nextInt(25);
+  }
+
+  int _buildBidQuantity(int tradeVolume, int level) {
+    final random = Random();
+
+    final base =
+    max((tradeVolume * (8 - level) ~/ 28), 5);
+
+    return base + random.nextInt(25);
   }
 
   List<double> _buildAskPrices(double currentPrice) {
@@ -180,7 +217,9 @@ class StockOrderBookSection extends StatelessWidget {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFFE5E7EB)),
+      border: Border.all(
+        color: const Color(0xFFE5E7EB),
+      ),
       boxShadow: const [
         BoxShadow(
           color: Color(0x06000000),
@@ -194,6 +233,18 @@ class StockOrderBookSection extends StatelessWidget {
   String _formatPrice(num value) {
     return value
         .toStringAsFixed(0)
-        .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',');
+        .replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+          (match) => ',',
+    );
+  }
+
+  String _formatQty(int value) {
+    return value
+        .toString()
+        .replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+          (match) => ',',
+    );
   }
 }

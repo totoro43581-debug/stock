@@ -60,7 +60,7 @@ class StockChartSection extends StatelessWidget {
 
   Widget _buildRealtimeBadge() {
     final timeText = lastRealtimeUpdatedAt == null
-        ? '대기 중'
+        ? '아직 없음'
         : '${lastRealtimeUpdatedAt!.hour.toString().padLeft(2, '0')}:'
         '${lastRealtimeUpdatedAt!.minute.toString().padLeft(2, '0')}:'
         '${lastRealtimeUpdatedAt!.second.toString().padLeft(2, '0')}';
@@ -84,7 +84,7 @@ class StockChartSection extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            '실시간 · 5분 갱신 · $timeText',
+            '거래량 반영 · 마지막 갱신 · $timeText',
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,

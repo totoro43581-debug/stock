@@ -23,6 +23,7 @@ import 'package:stock/feature/stock/view/widget/stock_trade_panel_section.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/stock/view/widget/stock_tick_log_section.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -119,20 +120,59 @@ class _StockScreenState extends State<StockScreen> {
     await _loadHoldings();
     await _loadTradeHistory();
     await _loadPendingOrders();
+
+    try {
+      await _stockPriceRepository.simulateStockPrices();
+      debugPrint('가상 거래량 초기 갱신 성공');
+    } catch (e) {
+      debugPrint('가상 거래량 초기 갱신 실패: $e');
+    }
+
+    await _loadMarketItems();
+
+    try {
+      await _stockTradeRepository.processPendingOrders();
+      debugPrint('초기 지정가 자동체결 확인 성공');
+    } catch (e) {
+      debugPrint('초기 지정가 자동체결 실패: $e');
+    }
+
+    await _loadWallet();
+    await _loadHoldings();
+    await _loadTradeHistory();
+    await _loadPendingOrders();
+
+    if (!mounted) return;
+
+    setState(() {
+      _lastRealtimeUpdatedAt = DateTime.now();
+    });
   }
 
   void _startRealtimePriceUpdate() {
     _realtimePriceTimer?.cancel();
 
-    _realtimePriceTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+    _realtimePriceTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       if (!mounted || _isRealtimeUpdating) return;
 
+      _isRealtimeUpdating = true;
+
       try {
-        _isRealtimeUpdating = true;
+        final beforeCount = _pendingOrderItems.length;
 
         await _stockPriceRepository.simulateStockPrices();
 
-        final beforeCount = _pendingOrderItems.length;
+        await _loadMarketItems();
+
+        final firstItem = _marketItems.isEmpty ? null : _marketItems.first;
+
+        debugPrint(
+          '가상거래량 갱신 확인: '
+              '${firstItem?.name} / '
+              '거래량 ${firstItem?.tradeVolume} / '
+              '가격 ${firstItem?.currentPrice} / '
+              '등락률 ${firstItem?.changeRate}',
+        );
 
         await _stockTradeRepository.processPendingOrders();
 
@@ -147,20 +187,22 @@ class _StockScreenState extends State<StockScreen> {
           _showSnackBar('지정가 주문이 체결되었습니다.');
         }
 
-        if (mounted) {
-          setState(() {
-            _lastRealtimeUpdatedAt = DateTime.now();
-          });
-        }
-
-        await _loadMarketItems();
-
         final selectedItem = _selectedMarketItem;
         if (selectedItem != null) {
           await _loadStockChart(selectedItem.id, selectedItem.name);
         }
+
+        if (!mounted) return;
+
+        setState(() {
+          _lastRealtimeUpdatedAt = DateTime.now();
+        });
       } catch (e) {
-        debugPrint('실시간 가격 갱신 실패: $e');
+        debugPrint('가상 거래량 자동 갱신 실패: $e');
+
+        if (mounted) {
+          _showSnackBar('가상 거래량 갱신 실패: $e');
+        }
       } finally {
         _isRealtimeUpdating = false;
       }
@@ -522,6 +564,9 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     switch (_selectedSort) {
+      case '거래대금':
+        result.sort((a, b) => b.tradeAmount.compareTo(a.tradeAmount));
+        break;
       case '거래량':
         result.sort((a, b) => b.tradeVolume.compareTo(a.tradeVolume));
         break;
@@ -787,6 +832,10 @@ class _StockScreenState extends State<StockScreen> {
                   pendingOrders: _pendingOrderItems,
                   isLoggedIn: _isLoggedIn,
                   onCancelOrder: _cancelPendingOrder,
+                ),
+                const SizedBox(height: _gap),
+                StockTickLogSection(
+                  items: _marketItems,
                 ),
                 const SizedBox(height: _gap),
                 StockHoldingSection(
