@@ -129,6 +129,7 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     await _loadMarketItems();
+    await _loadHoldings();
 
     try {
       await _stockTradeRepository.processPendingOrders();
@@ -164,15 +165,19 @@ class _StockScreenState extends State<StockScreen> {
 
         await _loadMarketItems();
 
-        final firstItem = _marketItems.isEmpty ? null : _marketItems.first;
+        debugPrint('### 실행중인 StockScreen 파일 확인 ###');
+        debugPrint('가상거래량 갱신 종목 수: ${_marketItems.length}');
 
-        debugPrint(
-          '가상거래량 갱신 확인: '
-              '${firstItem?.name} / '
-              '거래량 ${firstItem?.tradeVolume} / '
-              '가격 ${firstItem?.currentPrice} / '
-              '등락률 ${firstItem?.changeRate}',
-        );
+        for (final item in _marketItems) {
+          debugPrint(
+            '가상거래량 갱신 확인: '
+                '${item.code} / '
+                '${item.name} / '
+                '거래량 ${item.tradeVolume} / '
+                '가격 ${item.currentPrice} / '
+                '등락률 ${item.changeRate}',
+          );
+        }
 
         await _stockTradeRepository.processPendingOrders();
 
@@ -408,11 +413,19 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  // 수정47차: 거래 직후 시장/차트까지 즉시 갱신
   Future<void> _reloadAfterTrade() async {
+    await _loadMarketItems();
     await _loadWallet();
     await _loadHoldings();
     await _loadTradeHistory();
     await _loadPendingOrders();
+
+    final selectedItem = _selectedMarketItem;
+
+    if (selectedItem != null) {
+      await _loadStockChart(selectedItem.id, selectedItem.name);
+    }
   }
 
   Future<void> _processPendingOrdersManually() async {
@@ -566,6 +579,21 @@ class _StockScreenState extends State<StockScreen> {
     switch (_selectedSort) {
       case '거래대금':
         result.sort((a, b) => b.tradeAmount.compareTo(a.tradeAmount));
+        break;
+      case '체결강도':
+        result.sort((a, b) {
+          final aStrength =
+          a.virtualSellVolume <= 0
+              ? 0
+              : (a.virtualBuyVolume / a.virtualSellVolume);
+
+          final bStrength =
+          b.virtualSellVolume <= 0
+              ? 0
+              : (b.virtualBuyVolume / b.virtualSellVolume);
+
+          return bStrength.compareTo(aStrength);
+        });
         break;
       case '거래량':
         result.sort((a, b) => b.tradeVolume.compareTo(a.tradeVolume));

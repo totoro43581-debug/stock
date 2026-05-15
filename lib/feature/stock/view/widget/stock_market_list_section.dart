@@ -183,6 +183,7 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
                   '등락률',
                   '거래량',
                   '거래대금',
+                  '체결강도',
                 ],
                 onChanged: widget.onSortChanged,
               ),

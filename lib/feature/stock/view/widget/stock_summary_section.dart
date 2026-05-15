@@ -32,7 +32,7 @@ class StockSummarySection extends StatelessWidget {
       _buildSummaryCard(
         title: '보유 현금',
         value: '₩ ${_formatPrice(cash)}',
-        subValue: isWalletLoading ? '지갑 불러오는 중' : 'wallet.cash_balance',
+        subValue: isWalletLoading ? '지갑 불러오는 중' : '거래 가능 현금',
         valueColor: const Color(0xFF111827),
       ),
       _buildSummaryCard(

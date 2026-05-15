@@ -39,6 +39,16 @@ class StockOrderBookSection extends StatelessWidget {
     final askPrices = _buildAskPrices(item.currentPrice);
     final bidPrices = _buildBidPrices(item.currentPrice);
 
+    final totalAskQuantity = List.generate(
+      askPrices.length,
+          (index) => _buildAskQuantity(item.tradeVolume, index),
+    ).fold<int>(0, (sum, value) => sum + value);
+
+    final totalBidQuantity = List.generate(
+      bidPrices.length,
+          (index) => _buildBidQuantity(item.tradeVolume, index),
+    ).fold<int>(0, (sum, value) => sum + value);
+
     return Container(
       height: 580,
       padding: const EdgeInsets.all(14),
@@ -54,7 +64,36 @@ class StockOrderBookSection extends StatelessWidget {
               color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '매도잔량 ${_formatQty(totalAskQuantity)}주',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFDC2626),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '매수잔량 ${_formatQty(totalBidQuantity)}주',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
           Expanded(
             child: Column(
               children: [
@@ -71,8 +110,7 @@ class StockOrderBookSection extends StatelessWidget {
                     ),
                   ),
                 Container(
-                  height: 36,
-                  alignment: Alignment.center,
+                  height: 52,
                   decoration: const BoxDecoration(
                     color: Color(0xFFF8FAFC),
                     border: Border(
@@ -80,13 +118,32 @@ class StockOrderBookSection extends StatelessWidget {
                       bottom: BorderSide(color: Color(0xFFE5E7EB)),
                     ),
                   ),
-                  child: Text(
-                    '현재가 ₩ ${_formatPrice(item.currentPrice)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF111827),
-                    ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${item.changeRate >= 0 ? '▲' : '▼'} '
+                            '${item.changeRate.toStringAsFixed(2)}%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: item.changeRate >= 0
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF2563EB),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '₩ ${_formatPrice(item.currentPrice)}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: item.changeRate >= 0
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF2563EB),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 for (int i = 0; i < bidPrices.length; i++)
@@ -164,17 +221,34 @@ class StockOrderBookSection extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 14),
-            SizedBox(
-              width: 52,
-              child: Text(
-                '${_formatQty(quantity)}주',
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF64748B),
-                ),
+            const SizedBox(width: 10),
+
+            Expanded(
+              child: Stack(
+                alignment: Alignment.centerRight,
+                children: [
+                  Container(
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: isAsk
+                          ? const Color(0xFFFFE4E6)
+                          : const Color(0xFFDBEAFE),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    width: min(quantity.toDouble(), 120),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Text(
+                      '${_formatQty(quantity)}주',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -202,15 +276,38 @@ class StockOrderBookSection extends StatelessWidget {
   }
 
   List<double> _buildAskPrices(double currentPrice) {
+    final tick = _priceTick(currentPrice);
+
     return List.generate(8, (index) {
-      return currentPrice + ((8 - index) * 100);
+      return currentPrice + ((8 - index) * tick);
     });
   }
 
   List<double> _buildBidPrices(double currentPrice) {
+    final tick = _priceTick(currentPrice);
+
     return List.generate(8, (index) {
-      return currentPrice - ((index + 1) * 100);
+      final price = currentPrice - ((index + 1) * tick);
+
+      return price < tick ? tick : price;
     });
+  }
+
+// 수정55차: 가격대별 호가 단위
+  double _priceTick(double price) {
+    if (price < 1000) {
+      return 1;
+    }
+
+    if (price < 10000) {
+      return 10;
+    }
+
+    if (price < 100000) {
+      return 100;
+    }
+
+    return 1000;
   }
 
   BoxDecoration _cardDecoration() {

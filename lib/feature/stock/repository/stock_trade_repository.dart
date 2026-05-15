@@ -281,6 +281,15 @@ class StockTradeRepository {
       'price': price,
       'total_amount': totalAmount,
     });
+
+    // 수정42차: 매수 체결 후 거래량 증가
+    await _client.rpc(
+      'increase_stock_volume',
+      params: {
+        'p_stock_id': stockItem['id'],
+        'p_quantity': quantity,
+      },
+    );
   }
 
   // 수정1차: 매도 검증 로직 강화
@@ -376,5 +385,12 @@ class StockTradeRepository {
       'price': price,
       'total_amount': price * quantity,
     });
+    await _client.rpc(
+      'increase_stock_volume',
+      params: {
+        'p_stock_id': stockItem['id'],
+        'p_quantity': quantity,
+      },
+    );
   }
 }

@@ -168,6 +168,18 @@ class StockTradeHistorySection extends StatelessWidget {
             ),
           ),
           SizedBox(
+            width: 110,
+            child: Text(
+              '₩ ${_formatPrice(item.totalAmount)}',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF111827),
+              ),
+            ),
+          ),
+          SizedBox(
             width: 70,
             child: Text(
               _formatDateTime(item.createdAt),
