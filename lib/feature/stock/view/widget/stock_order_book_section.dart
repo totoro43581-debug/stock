@@ -257,22 +257,46 @@ class StockOrderBookSection extends StatelessWidget {
     );
   }
 
+  // 수정56차: 매도 호가 수량 고정 계산
   int _buildAskQuantity(int tradeVolume, int level) {
-    final random = Random();
+    final int baseVolume = tradeVolume <= 0 ? 100 : tradeVolume;
 
-    final base =
-    max((tradeVolume * (8 - level) ~/ 30), 5);
+    final List<double> rates = [
+      0.20,
+      0.17,
+      0.14,
+      0.11,
+      0.09,
+      0.07,
+      0.05,
+      0.03,
+    ];
 
-    return base + random.nextInt(25);
+    final double rate = rates[level.clamp(0, rates.length - 1)];
+    final int quantity = (baseVolume * rate).round();
+
+    return quantity < 1 ? 1 : quantity;
   }
 
+// 수정56차: 매수 호가 수량 고정 계산
   int _buildBidQuantity(int tradeVolume, int level) {
-    final random = Random();
+    final int baseVolume = tradeVolume <= 0 ? 100 : tradeVolume;
 
-    final base =
-    max((tradeVolume * (8 - level) ~/ 28), 5);
+    final List<double> rates = [
+      0.22,
+      0.18,
+      0.15,
+      0.11,
+      0.08,
+      0.06,
+      0.04,
+      0.03,
+    ];
 
-    return base + random.nextInt(25);
+    final double rate = rates[level.clamp(0, rates.length - 1)];
+    final int quantity = (baseVolume * rate).round();
+
+    return quantity < 1 ? 1 : quantity;
   }
 
   List<double> _buildAskPrices(double currentPrice) {
