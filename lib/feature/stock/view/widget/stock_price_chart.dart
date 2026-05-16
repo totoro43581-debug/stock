@@ -1,16 +1,20 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:stock/feature/stock/model/stock_candle_model.dart';
 
 class StockPriceChart extends StatefulWidget {
   final List<StockCandleModel> prices;
   final double currentPrice;
 
+  final String selectedRange;
+
   const StockPriceChart({
     super.key,
     required this.prices,
     required this.currentPrice,
+    required this.selectedRange,
   });
 
   @override
@@ -19,15 +23,9 @@ class StockPriceChart extends StatefulWidget {
 
 class _StockPriceChartState extends State<StockPriceChart> {
   Offset? _hoverPosition;
-  String _selectedPeriod = '1주';
 
-  final List<String> _periods = const [
-    '1주',
-    '1개월',
-    '3개월',
-    '1년',
-    '전체',
-  ];
+  // 수정72차: 차트 확대/축소 상태
+  double _zoomLevel = 1.0;
 
   List<StockCandleModel> get _filteredCandles {
     if (widget.prices.isEmpty) return [];
@@ -39,7 +37,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
 
     Duration? range;
 
-    switch (_selectedPeriod) {
+    switch (widget.selectedRange) {
       case '1주':
         range = const Duration(days: 7);
         break;
@@ -53,6 +51,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
         range = const Duration(days: 365);
         break;
       case '전체':
+        return sorted;
       default:
         return sorted;
     }
@@ -67,9 +66,28 @@ class _StockPriceChartState extends State<StockPriceChart> {
     return filtered.isEmpty ? sorted : filtered;
   }
 
+  // 수정72차: 줌 배율에 따라 실제 표시할 캔들 수 조정
+  List<StockCandleModel> _applyZoom(List<StockCandleModel> candles) {
+    if (candles.isEmpty) return [];
+
+    final int minVisibleCount = candles.length < 20 ? candles.length : 20;
+
+    int visibleCount = (candles.length / _zoomLevel).round();
+
+    if (visibleCount < minVisibleCount) {
+      visibleCount = minVisibleCount;
+    }
+
+    if (visibleCount > candles.length) {
+      visibleCount = candles.length;
+    }
+
+    return candles.sublist(candles.length - visibleCount);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final candles = _filteredCandles;
+    final candles = _applyZoom(_filteredCandles);
 
     if (candles.isEmpty) {
       return Container(
@@ -142,55 +160,6 @@ class _StockPriceChartState extends State<StockPriceChart> {
 
           const SizedBox(height: 12),
 
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _periods.map((period) {
-                final selected = _selectedPeriod == period;
-
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedPeriod = period;
-                        _hoverPosition = null;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xFF111827)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: selected
-                              ? const Color(0xFF111827)
-                              : const Color(0xFFE5E7EB),
-                        ),
-                      ),
-                      child: Text(
-                        period,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: selected
-                              ? Colors.white
-                              : const Color(0xFF6B7280),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
           const SizedBox(height: 10),
 
           // 수정28차: 이동평균선 범례
@@ -211,23 +180,46 @@ class _StockPriceChartState extends State<StockPriceChart> {
           const SizedBox(height: 10),
 
           Expanded(
-            child: MouseRegion(
-              onHover: (event) {
-                setState(() {
-                  _hoverPosition = event.localPosition;
-                });
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerSignal: (event) {
+                if (event is! PointerScrollEvent) return;
+
+                GestureBinding.instance.pointerSignalResolver.register(
+                  event,
+                      (PointerSignalEvent resolvedEvent) {
+                    if (resolvedEvent is! PointerScrollEvent) return;
+
+                    setState(() {
+                      if (resolvedEvent.scrollDelta.dy < 0) {
+                        _zoomLevel = (_zoomLevel * 1.2).clamp(1.0, 8.0);
+                      } else {
+                        _zoomLevel = (_zoomLevel / 1.2).clamp(1.0, 8.0);
+                      }
+
+                      _hoverPosition = null;
+                    });
+                  },
+                );
               },
-              onExit: (_) {
-                setState(() {
-                  _hoverPosition = null;
-                });
-              },
-              child: CustomPaint(
-                painter: _CandleChartPainter(
-                  candles: candles,
-                  hoverPosition: _hoverPosition,
+              child: MouseRegion(
+                onHover: (event) {
+                  setState(() {
+                    _hoverPosition = event.localPosition;
+                  });
+                },
+                onExit: (_) {
+                  setState(() {
+                    _hoverPosition = null;
+                  });
+                },
+                child: CustomPaint(
+                  painter: _CandleChartPainter(
+                    candles: candles,
+                    hoverPosition: _hoverPosition,
+                  ),
+                  child: const SizedBox.expand(),
                 ),
-                child: const SizedBox.expand(),
               ),
             ),
           ),
@@ -685,7 +677,7 @@ class _CandleChartPainter extends CustomPainter {
 
     _drawText(
       canvas: canvas,
-      text: _formatDate(candle.createdAt),
+      text: _formatDateTime(candle.createdAt),
       offset: Offset(tooltipX + 10, tooltipY + 8),
       fontSize: 11,
       color: const Color(0xFFD1D5DB),
@@ -786,6 +778,17 @@ class _CandleChartPainter extends CustomPainter {
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
     return '$month/$day';
+  }
+
+  String _formatDateTime(DateTime value) {
+    final year = value.year.toString();
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    final second = value.second.toString().padLeft(2, '0');
+
+    return '$year-$month-$day $hour:$minute:$second';
   }
 
   @override

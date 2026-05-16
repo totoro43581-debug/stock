@@ -9,6 +9,8 @@ class StockChartSection extends StatelessWidget {
   final List<StockCandleModel> prices;
   final bool isChartLoading;
   final DateTime? lastRealtimeUpdatedAt;
+  final String selectedRange;
+  final ValueChanged<String> onRangeChanged;
 
   const StockChartSection({
     super.key,
@@ -16,6 +18,8 @@ class StockChartSection extends StatelessWidget {
     required this.prices,
     required this.isChartLoading,
     required this.lastRealtimeUpdatedAt,
+    required this.selectedRange,
+    required this.onRangeChanged,
   });
 
   @override
@@ -44,16 +48,77 @@ class StockChartSection extends StatelessWidget {
               _buildRealtimeBadge(),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          _buildRangeButtons(),
+          const SizedBox(height: 10),
           Expanded(
             child: isChartLoading
                 ? const Center(child: CircularProgressIndicator())
                 : StockPriceChart(
               prices: prices,
               currentPrice: item?.currentPrice ?? 0,
+              selectedRange: selectedRange,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // 수정70차: 차트 범위 버튼 한 줄 통합
+  Widget _buildRangeButtons() {
+    final ranges = [
+      '전체',
+      '1분',
+      '5분',
+      '15분',
+      '30분',
+      '1시간',
+      '3시간',
+      '1주',
+      '1개월',
+      '3개월',
+      '1년',
+      ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final range in ranges) ...[
+            _buildRangeButton(range),
+            const SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRangeButton(String range) {
+    final selected = selectedRange == range;
+
+    return SizedBox(
+      height: 30,
+      child: OutlinedButton(
+        onPressed: () => onRangeChanged(range),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          backgroundColor: selected ? const Color(0xFF0F172A) : Colors.white,
+          foregroundColor: selected ? Colors.white : const Color(0xFF334155),
+          side: BorderSide(
+            color: selected ? const Color(0xFF0F172A) : const Color(0xFFE5E7EB),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        child: Text(
+          range,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ),
     );
   }

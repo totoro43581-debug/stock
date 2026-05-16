@@ -104,6 +104,8 @@ class StockHeaderSection extends StatelessWidget {
                     color: Colors.white,
                   ),
                 ),
+                const SizedBox(width: 18),
+                _buildTradeStrength(item),
               ],
             ),
           ),
@@ -126,6 +128,53 @@ class StockHeaderSection extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 수정59차: 체결강도 표시
+  Widget _buildTradeStrength(StockItemViewModel item) {
+    final int buyVolume = item.virtualBuyVolume;
+    final int sellVolume = item.virtualSellVolume;
+
+    final double strength = sellVolume <= 0
+        ? 0
+        : (buyVolume / sellVolume) * 100;
+
+    final bool isBuyStrong = strength >= 100;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0x1FFFFFFF),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: const Color(0x33FFFFFF),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '체결강도',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFCBD5E1),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${strength.toStringAsFixed(1)}% · ${isBuyStrong ? '매수 우세' : '매도 우세'}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: isBuyStrong
+                  ? const Color(0xFFFCA5A5)
+                  : const Color(0xFF93C5FD),
             ),
           ),
         ],

@@ -282,12 +282,14 @@ class StockTradeRepository {
       'total_amount': totalAmount,
     });
 
-    // 수정42차: 매수 체결 후 거래량 증가
+    // 수정57차: 매수 체결 후 현재가/거래대금 반영
     await _client.rpc(
-      'increase_stock_volume',
+      'apply_stock_trade',
       params: {
         'p_stock_id': stockItem['id'],
+        'p_trade_price': price,
         'p_quantity': quantity,
+        'p_is_buy': true,
       },
     );
   }
@@ -385,11 +387,14 @@ class StockTradeRepository {
       'price': price,
       'total_amount': price * quantity,
     });
+    // 수정57차: 매도 체결 후 현재가/거래대금 반영
     await _client.rpc(
-      'increase_stock_volume',
+      'apply_stock_trade',
       params: {
         'p_stock_id': stockItem['id'],
+        'p_trade_price': price,
         'p_quantity': quantity,
+        'p_is_buy': false,
       },
     );
   }

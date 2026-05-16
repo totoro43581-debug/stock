@@ -1,79 +1,171 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import 'package:stock/feature/stock/model/stock_item_view_model.dart';
+import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
 
-class StockTickLogSection extends StatelessWidget {
-  final List<StockItemViewModel> items;
+class StockTickLogSection extends StatefulWidget {
+  final List<StockTradeHistoryModel> tradeHistoryItems;
+  final ValueChanged<bool> onHoverChanged;
 
   const StockTickLogSection({
     super.key,
-    required this.items,
+    required this.tradeHistoryItems,
+    required this.onHoverChanged,
   });
 
   @override
+  State<StockTickLogSection> createState() => _StockTickLogSectionState();
+}
+
+class _StockTickLogSectionState extends State<StockTickLogSection> {
+  final ScrollController _scrollController = ScrollController();
+
+  Timer? _flashTimer;
+
+  bool _flashVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _flashTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+          (_) {
+        if (!mounted) return;
+
+        setState(() {
+          _flashVisible = !_flashVisible;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    widget.onHoverChanged(false);
+    _flashTimer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final logs = [...items]
-      ..sort((a, b) => b.tradeVolume.compareTo(a.tradeVolume));
+    final visibleLogs = [...widget.tradeHistoryItems]
+      ..sort((a, b) {
+        final aTime = a.createdAt ?? DateTime.now();
+        final bTime = b.createdAt ?? DateTime.now();
 
-    final visibleLogs = logs.take(8).toList();
+        return bTime.compareTo(aTime);
+      });
 
-    return Container(
-      height: 220,
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '실시간 체결',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF111827),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: visibleLogs.isEmpty
-                ? const Center(
-              child: Text(
-                '체결 로그가 없습니다.',
+    final limitedLogs = visibleLogs.take(30).toList();
+
+    return MouseRegion(
+      onEnter: (_) => widget.onHoverChanged(true),
+      onExit: (_) => widget.onHoverChanged(false),
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerSignal: (event) {
+          if (event is! PointerScrollEvent) return;
+
+          GestureBinding.instance.pointerSignalResolver.register(
+            event,
+                (PointerSignalEvent resolvedEvent) {
+              if (resolvedEvent is! PointerScrollEvent) return;
+              if (!_scrollController.hasClients) return;
+
+              final position = _scrollController.position;
+
+              final double nextOffset =
+              (position.pixels + resolvedEvent.scrollDelta.dy).clamp(
+                position.minScrollExtent,
+                position.maxScrollExtent,
+              );
+
+              _scrollController.jumpTo(nextOffset);
+            },
+          );
+        },
+        child: Container(
+          height: 240,
+          padding: const EdgeInsets.all(14),
+          decoration: _cardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '실시간 체결',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF64748B),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF111827),
                 ),
               ),
-            )
-                : ListView.separated(
-              itemCount: visibleLogs.length,
-              separatorBuilder: (_, __) {
-                return const Divider(
-                  height: 1,
-                  color: Color(0xFFF1F5F9),
-                );
-              },
-              itemBuilder: (context, index) {
-                return _buildLogRow(visibleLogs[index]);
-              },
-            ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: visibleLogs.isEmpty
+                    ? const Center(
+                  child: Text(
+                    '체결 로그가 없습니다.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                )
+                    : ListView.separated(
+                  controller: _scrollController,
+                  primary: false,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: limitedLogs.length,
+                  separatorBuilder: (_, __) {
+                    return const Divider(
+                      height: 1,
+                      color: Color(0xFFF1F5F9),
+                    );
+                  },
+                  itemBuilder: (context, index) {
+                    return _buildLogRow(
+                      limitedLogs[index],
+                      index,
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildLogRow(StockItemViewModel item) {
-    final isUp = item.changeRate >= 0;
-    final color = isUp ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
+  Widget _buildLogRow(
+      StockTradeHistoryModel item,
+      int index,
+      ) {
+    final bool isBuy = item.tradeType == 'buy';
 
-    return SizedBox(
-      height: 34,
+    final Color color =
+    isBuy ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: index == 0 && _flashVisible
+          ? BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+      )
+          : null,
       child: Row(
         children: [
           SizedBox(
-            width: 52,
+            width: 58,
             child: Text(
-              _nowText(),
+              _formatTime(item.createdAt ?? DateTime.now()),
               style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
@@ -81,9 +173,20 @@ class StockTickLogSection extends StatelessWidget {
               ),
             ),
           ),
+          SizedBox(
+            width: 62,
+            child: Text(
+              isBuy ? '매수체결' : '매도체결',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: color,
+              ),
+            ),
+          ),
           Expanded(
             child: Text(
-              item.name,
+              item.stockName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -94,25 +197,12 @@ class StockTickLogSection extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 82,
+            width: 88,
             child: Text(
-              '₩ ${_formatPrice(item.currentPrice)}',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF111827),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 58,
-            child: Text(
-              '${item.changeRate >= 0 ? '+' : ''}${item.changeRate.toStringAsFixed(2)}%',
+              '₩ ${_formatPrice(item.price)}',
               textAlign: TextAlign.right,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w900,
                 color: color,
               ),
@@ -120,13 +210,26 @@ class StockTickLogSection extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 56,
+            width: 58,
             child: Text(
-              '${_formatVolume(item.tradeVolume)}주',
+              '${_formatVolume(item.quantity)}주',
               textAlign: TextAlign.right,
               style: const TextStyle(
                 fontSize: 10,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF475569),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 72,
+            child: Text(
+              '₩ ${_formatPrice(item.totalAmount)}',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
                 color: Color(0xFF64748B),
               ),
             ),
@@ -136,6 +239,14 @@ class StockTickLogSection extends StatelessWidget {
     );
   }
 
+  String _formatTime(DateTime value) {
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    final second = value.second.toString().padLeft(2, '0');
+
+    return '$hour:$minute:$second';
+  }
+
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
       color: Colors.white,
@@ -143,24 +254,7 @@ class StockTickLogSection extends StatelessWidget {
       border: Border.all(
         color: const Color(0xFFE5E7EB),
       ),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x06000000),
-          blurRadius: 8,
-          offset: Offset(0, 3),
-        ),
-      ],
     );
-  }
-
-  String _nowText() {
-    final now = DateTime.now();
-
-    final hour = now.hour.toString().padLeft(2, '0');
-    final minute = now.minute.toString().padLeft(2, '0');
-    final second = now.second.toString().padLeft(2, '0');
-
-    return '$hour:$minute:$second';
   }
 
   String _formatPrice(num value) {
