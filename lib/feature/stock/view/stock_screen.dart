@@ -10,20 +10,21 @@ import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
 import 'package:stock/feature/stock/repository/stock_price_repository.dart';
 import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
+import 'package:stock/feature/stock/service/stock_buy_service.dart';
+import 'package:stock/feature/stock/service/stock_sell_service.dart';
 import 'package:stock/feature/stock/view/stock_register_screen.dart';
 import 'package:stock/feature/stock/view/widget/stock_chart_section.dart';
-import 'package:stock/feature/stock/view/widget/stock_header_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_holding_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_market_list_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_order_book_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_pending_order_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_summary_section.dart';
+import 'package:stock/feature/stock/view/widget/stock_tick_log_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_trade_history_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_trade_panel_section.dart';
 import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:stock/feature/stock/view/widget/stock_tick_log_section.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -37,6 +38,10 @@ class _StockScreenState extends State<StockScreen> {
   final StockTradeRepository _stockTradeRepository = StockTradeRepository();
   final StockPriceRepository _stockPriceRepository = StockPriceRepository();
   final WalletRepository _walletRepository = WalletRepository();
+
+  // 수정75차: 매수/매도 로직 서비스 분리
+  final StockBuyService _stockBuyService = StockBuyService();
+  final StockSellService _stockSellService = StockSellService();
 
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController(
@@ -96,8 +101,7 @@ class _StockScreenState extends State<StockScreen> {
 
     setState(() {
       _isTickLogHovered = isHovered;
-      _lockedPageOffset =
-      isHovered ? _pageScrollController.offset : null;
+      _lockedPageOffset = isHovered ? _pageScrollController.offset : null;
     });
   }
 
@@ -182,68 +186,75 @@ class _StockScreenState extends State<StockScreen> {
   void _startRealtimePriceUpdate() {
     _realtimePriceTimer?.cancel();
 
-    _realtimePriceTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
-      if (!mounted || _isRealtimeUpdating) return;
+    _realtimePriceTimer = Timer.periodic(
+      const Duration(minutes: 1),
+          (_) async {
+        if (!mounted || _isRealtimeUpdating) return;
 
-      _isRealtimeUpdating = true;
+        _isRealtimeUpdating = true;
 
-      try {
-        final beforeCount = _pendingOrderItems.length;
+        try {
+          final beforeCount = _pendingOrderItems.length;
 
-        await _stockPriceRepository.simulateStockPrices();
+          await _stockPriceRepository.simulateStockPrices();
 
-        await _loadMarketItems();
+          await _loadMarketItems();
 
-        debugPrint('### 실행중인 StockScreen 파일 확인 ###');
-        debugPrint('가상거래량 갱신 종목 수: ${_marketItems.length}');
+          debugPrint('### 실행중인 StockScreen 파일 확인 ###');
+          debugPrint('가상거래량 갱신 종목 수: ${_marketItems.length}');
 
-        for (final item in _marketItems) {
-          debugPrint(
-            '가상거래량 갱신 확인: '
-                '${item.code} / '
-                '${item.name} / '
-                '거래량 ${item.tradeVolume} / '
-                '가격 ${item.currentPrice} / '
-                '등락률 ${item.changeRate}',
-          );
+          for (final item in _marketItems) {
+            debugPrint(
+              '가상거래량 갱신 확인: '
+                  '${item.code} / '
+                  '${item.name} / '
+                  '거래량 ${item.tradeVolume} / '
+                  '가격 ${item.currentPrice} / '
+                  '등락률 ${item.changeRate}',
+            );
+          }
+
+          await _stockTradeRepository.processPendingOrders();
+
+          await _loadPendingOrders();
+
+          if (_isLoggedIn) {
+            await _loadWallet();
+            await _loadHoldings();
+            await _loadTradeHistory();
+          }
+
+          final afterCount = _pendingOrderItems.length;
+
+          if (mounted && beforeCount > afterCount) {
+            _showSnackBar('지정가 주문이 체결되었습니다.');
+          }
+
+          final selectedItem = _selectedMarketItem;
+          if (selectedItem != null) {
+            await _loadStockChart(
+              selectedItem.id,
+              selectedItem.name,
+              showLoading: false,
+            );
+          }
+
+          if (!mounted) return;
+
+          setState(() {
+            _lastRealtimeUpdatedAt = DateTime.now();
+          });
+        } catch (e) {
+          debugPrint('가상 거래량 자동 갱신 실패: $e');
+
+          if (mounted) {
+            _showSnackBar('가상 거래량 갱신 실패: $e');
+          }
+        } finally {
+          _isRealtimeUpdating = false;
         }
-
-        await _stockTradeRepository.processPendingOrders();
-
-        await _loadPendingOrders();
-
-        if (_isLoggedIn) {
-          await _loadWallet();
-          await _loadHoldings();
-          await _loadTradeHistory();
-        }
-
-        final afterCount = _pendingOrderItems.length;
-
-        if (mounted && beforeCount > afterCount) {
-          _showSnackBar('지정가 주문이 체결되었습니다.');
-        }
-
-        final selectedItem = _selectedMarketItem;
-        if (selectedItem != null) {
-          await _loadStockChart(selectedItem.id, selectedItem.name);
-        }
-
-        if (!mounted) return;
-
-        setState(() {
-          _lastRealtimeUpdatedAt = DateTime.now();
-        });
-      } catch (e) {
-        debugPrint('가상 거래량 자동 갱신 실패: $e');
-
-        if (mounted) {
-          _showSnackBar('가상 거래량 갱신 실패: $e');
-        }
-      } finally {
-        _isRealtimeUpdating = false;
-      }
-    });
+      },
+    );
   }
 
   Future<void> _loadMarketItems() async {
@@ -258,8 +269,10 @@ class _StockScreenState extends State<StockScreen> {
           market: _mapMarketLabel((row['market'] ?? '').toString()),
           currentPrice: ((row['current_price'] ?? 0) as num).toDouble(),
           changeRate: ((row['change_rate'] ?? 0) as num).toDouble(),
-          virtualBuyVolume: ((row['virtual_buy_volume'] ?? 0) as num).toInt(),
-          virtualSellVolume: ((row['virtual_sell_volume'] ?? 0) as num).toInt(),
+          virtualBuyVolume:
+          ((row['virtual_buy_volume'] ?? 0) as num).toInt(),
+          virtualSellVolume:
+          ((row['virtual_sell_volume'] ?? 0) as num).toInt(),
           tradeVolume: ((row['trade_volume'] ?? 0) as num).toInt(),
           tradeAmount: ((row['trade_amount'] ?? 0) as num).toDouble(),
           description: (row['market'] ?? '').toString().isEmpty
@@ -445,7 +458,7 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-// 수정74차: 자동갱신 시 차트 전체 깜빡임 방지
+  // 수정74차: 자동갱신 시 차트 전체 깜빡임 방지
   Future<void> _loadStockChart(
       String stockId,
       String stockName, {
@@ -612,6 +625,42 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  double get _availableBuyCash {
+    return _stockBuyService.availableCash(
+      cash: _cash,
+      pendingOrders: _pendingOrderItems,
+    );
+  }
+
+  double get _reservedBuyAmount {
+    return _cash - _availableBuyCash;
+  }
+
+  int get _selectedHoldingQuantity {
+    final item = _selectedMarketItem;
+    if (item == null) return 0;
+
+    final holding = _findHoldingByCode(item.code);
+    return holding?.quantity ?? 0;
+  }
+
+  int get _availableSellQuantity {
+    final item = _selectedMarketItem;
+    if (item == null) return 0;
+
+    final holding = _findHoldingByCode(item.code);
+
+    return _stockSellService.availableSellQuantity(
+      holding: holding,
+      pendingOrders: _pendingOrderItems,
+      stockCode: item.code,
+    );
+  }
+
+  int get _reservedSellQuantity {
+    return _selectedHoldingQuantity - _availableSellQuantity;
+  }
+
   List<StockItemViewModel> get _filteredItems {
     List<StockItemViewModel> result = List.of(_marketItems);
 
@@ -657,13 +706,11 @@ class _StockScreenState extends State<StockScreen> {
         break;
       case '체결강도':
         result.sort((a, b) {
-          final aStrength =
-          a.virtualSellVolume <= 0
+          final aStrength = a.virtualSellVolume <= 0
               ? 0
               : (a.virtualBuyVolume / a.virtualSellVolume);
 
-          final bStrength =
-          b.virtualSellVolume <= 0
+          final bStrength = b.virtualSellVolume <= 0
               ? 0
               : (b.virtualBuyVolume / b.virtualSellVolume);
 
@@ -730,6 +777,12 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  void _resetQuantityAfterOrder() {
+    setState(() {
+      _quantityController.text = '1';
+    });
+  }
+
   void _setMaxQuantity() {
     final item = _selectedMarketItem;
 
@@ -739,22 +792,18 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     if (_isBuyOrder) {
-      final int maxBuyQuantity = _orderPrice <= 0
-          ? 0
-          : (_cash / _orderPrice).floor();
+      final int maxBuyQuantity =
+      _orderPrice <= 0 ? 0 : (_availableBuyCash / _orderPrice).floor();
 
-      _quantityController.text = maxBuyQuantity <= 0
-          ? ''
-          : maxBuyQuantity.toString();
+      _quantityController.text =
+      maxBuyQuantity <= 0 ? '' : maxBuyQuantity.toString();
       return;
     }
 
-    final holding = _findHoldingByCode(item.code);
-    final int maxSellQuantity = holding?.quantity ?? 0;
+    final int maxSellQuantity = _availableSellQuantity;
 
-    _quantityController.text = maxSellQuantity <= 0
-        ? ''
-        : maxSellQuantity.toString();
+    _quantityController.text =
+    maxSellQuantity <= 0 ? '' : maxSellQuantity.toString();
   }
 
   Future<void> _handleBuy() async {
@@ -784,36 +833,22 @@ class _StockScreenState extends State<StockScreen> {
         _isTrading = true;
       });
 
-      final item = _selectedMarketItem!;
+      final message = await _stockBuyService.buy(
+        tradeRepository: _stockTradeRepository,
+        userId: _user!.id,
+        item: _selectedMarketItem!,
+        orderPrice: _orderPrice,
+        quantity: quantity,
+        cash: _cash,
+        isMarketOrder: _isMarketOrder,
+        pendingOrders: _pendingOrderItems,
+      );
 
-      if (_isMarketOrder) {
-        await _stockTradeRepository.buyStock(
-          userId: _user!.id,
-          stockCode: item.code,
-          stockName: item.name,
-          price: _orderPrice,
-          quantity: quantity,
-        );
+      await _reloadAfterTrade();
 
-        await _reloadAfterTrade();
-
-        if (!mounted) return;
-        _showSnackBar('시장가 매수 완료: ${item.name} ${quantity}주');
-      } else {
-        await _stockTradeRepository.createPendingOrder(
-          userId: _user!.id,
-          stockCode: item.code,
-          stockName: item.name,
-          orderType: 'buy',
-          orderPrice: _orderPrice,
-          quantity: quantity,
-        );
-
-        await _loadPendingOrders();
-
-        if (!mounted) return;
-        _showSnackBar('지정가 매수 주문 등록: ${item.name} ${quantity}주');
-      }
+      if (!mounted) return;
+      _resetQuantityAfterOrder();
+      _showSnackBar(message);
     } catch (e) {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
@@ -853,35 +888,24 @@ class _StockScreenState extends State<StockScreen> {
       });
 
       final item = _selectedMarketItem!;
+      final holding = _findHoldingByCode(item.code);
 
-      if (_isMarketOrder) {
-        await _stockTradeRepository.sellStock(
-          userId: _user!.id,
-          stockCode: item.code,
-          stockName: item.name,
-          price: _orderPrice,
-          quantity: quantity,
-        );
+      final message = await _stockSellService.sell(
+        tradeRepository: _stockTradeRepository,
+        userId: _user!.id,
+        item: item,
+        holding: holding,
+        orderPrice: _orderPrice,
+        quantity: quantity,
+        isMarketOrder: _isMarketOrder,
+        pendingOrders: _pendingOrderItems,
+      );
 
-        await _reloadAfterTrade();
+      await _reloadAfterTrade();
 
-        if (!mounted) return;
-        _showSnackBar('시장가 매도 완료: ${item.name} ${quantity}주');
-      } else {
-        await _stockTradeRepository.createPendingOrder(
-          userId: _user!.id,
-          stockCode: item.code,
-          stockName: item.name,
-          orderType: 'sell',
-          orderPrice: _orderPrice,
-          quantity: quantity,
-        );
-
-        await _loadPendingOrders();
-
-        if (!mounted) return;
-        _showSnackBar('지정가 매도 주문 등록: ${item.name} ${quantity}주');
-      }
+      if (!mounted) return;
+      _resetQuantityAfterOrder();
+      _showSnackBar(message);
     } catch (e) {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
@@ -925,17 +949,6 @@ class _StockScreenState extends State<StockScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      StockHeaderSection(
-                        selectedItem: _selectedMarketItem,
-                        onTapRegister: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const StockRegisterScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: _gap),
                       StockSummarySection(
                         totalAsset: _totalAsset,
                         cash: _cash,
@@ -944,20 +957,9 @@ class _StockScreenState extends State<StockScreen> {
                         totalProfitRate: _totalProfitRate,
                         isWalletLoading: _isWalletLoading,
                       ),
+
                       const SizedBox(height: _gap),
-                      _buildTradingLayout(filteredItems),
-                      const SizedBox(height: _gap),
-                      StockPendingOrderSection(
-                        pendingOrders: _pendingOrderItems,
-                        isLoggedIn: _isLoggedIn,
-                        onCancelOrder: _cancelPendingOrder,
-                      ),
-                      const SizedBox(height: _gap),
-                      StockTickLogSection(
-                        tradeHistoryItems: _tradeHistoryItems,
-                        onHoverChanged: _handleTickLogHoverChanged,
-                      ),
-                      const SizedBox(height: _gap),
+
                       StockHoldingSection(
                         holdingItems: _holdingItems,
                         marketItems: _marketItems,
@@ -974,6 +976,25 @@ class _StockScreenState extends State<StockScreen> {
 
                           _loadStockChart(item.id, item.name);
                         },
+                      ),
+
+                      const SizedBox(height: _gap),
+
+                      _buildTradingLayout(filteredItems),
+
+                      const SizedBox(height: _gap),
+
+                      StockPendingOrderSection(
+                        pendingOrders: _pendingOrderItems,
+                        isLoggedIn: _isLoggedIn,
+                        onCancelOrder: _cancelPendingOrder,
+                      ),
+
+                      const SizedBox(height: _gap),
+
+                      StockTickLogSection(
+                        tradeHistoryItems: _tradeHistoryItems,
+                        onHoverChanged: _handleTickLogHoverChanged,
                       ),
                     ],
                   ),
@@ -1070,6 +1091,11 @@ class _StockScreenState extends State<StockScreen> {
                 priceController: _priceController,
                 orderPrice: _orderPrice,
                 cash: _cash,
+                availableBuyCash: _availableBuyCash,
+                reservedBuyAmount: _reservedBuyAmount,
+                holdingQuantity: _selectedHoldingQuantity,
+                availableSellQuantity: _availableSellQuantity,
+                reservedSellQuantity: _reservedSellQuantity,
                 isBuyOrder: _isBuyOrder,
                 isMarketOrder: _isMarketOrder,
                 isTrading: _isTrading,

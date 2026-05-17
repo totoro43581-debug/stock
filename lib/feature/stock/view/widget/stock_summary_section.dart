@@ -66,8 +66,11 @@ class StockSummarySection extends StatelessWidget {
     required Color valueColor,
   }) {
     return Container(
-      height: 124,
-      padding: const EdgeInsets.all(16),
+      height: 112,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 14,
+      ),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,18 +83,18 @@ class StockSummarySection extends StatelessWidget {
               color: Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 22,
+              fontSize: 21,
               fontWeight: FontWeight.w900,
               color: valueColor,
             ),
           ),
-          const SizedBox(height: 6),
+          const Spacer(),
           Text(
             subValue,
             maxLines: 1,

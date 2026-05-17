@@ -46,7 +46,7 @@ class StockPendingOrderSection extends StatelessWidget {
             ],
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
           if (!isLoggedIn)
             _buildEmptyMessage('로그인 후 표시됩니다.')
@@ -54,27 +54,42 @@ class StockPendingOrderSection extends StatelessWidget {
             _buildEmptyMessage('미체결 주문이 없습니다.')
           else
             Column(
-              children: pendingOrders.map((item) {
-                return _buildPendingOrderCard(item);
-              }).toList(),
+              children: [
+                for (int i = 0; i < pendingOrders.length; i++) ...[
+                  _buildPendingOrderRow(pendingOrders[i]),
+                  if (i != pendingOrders.length - 1)
+                    const SizedBox(height: 8),
+                ],
+              ],
             ),
         ],
       ),
     );
   }
 
-  Widget _buildPendingOrderCard(
+  Widget _buildPendingOrderRow(
       StockPendingOrderModel item,
       ) {
     final bool isBuy = item.orderType == 'buy';
 
-    final Color color = isBuy
+    final Color pointColor = isBuy
         ? const Color(0xFF16A34A)
         : const Color(0xFFDC2626);
 
+    final Color buttonBgColor = isBuy
+        ? const Color(0xFFF0FDF4)
+        : const Color(0xFFFEF2F2);
+
+    final Color buttonBorderColor = isBuy
+        ? const Color(0xFFBBF7D0)
+        : const Color(0xFFFECACA);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      height: 54,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(14),
@@ -82,89 +97,88 @@ class StockPendingOrderSection extends StatelessWidget {
           color: const Color(0xFFE5E7EB),
         ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 52,
-                height: 24,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  isBuy ? '매수' : '매도',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                  ),
-                ),
+          Container(
+            width: 52,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: pointColor,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Text(
+              isBuy ? '매수' : '매도',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
               ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: Text(
-                  item.stockName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-              ),
-
-              Text(
-                '${item.quantity}주',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF334155),
-                ),
-              ),
-            ],
+            ),
           ),
 
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildInfoBox(
-                  title: '주문가격',
-                  value: '₩ ${_formatPrice(item.orderPrice)}',
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              Expanded(
-                child: _buildInfoBox(
-                  title: '주문시간',
-                  value: _formatDateTime(item.createdAt),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
+          const SizedBox(width: 14),
 
           SizedBox(
-            width: double.infinity,
-            height: 36,
+            width: 180,
+            child: Text(
+              item.stockName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF111827),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 20),
+
+          _buildInlineInfo(
+            title: '주문가',
+            value: '₩ ${_formatPrice(item.orderPrice)}',
+            width: 150,
+          ),
+
+          const SizedBox(width: 20),
+
+          _buildInlineInfo(
+            title: '시간',
+            value: _formatDateTime(item.createdAt),
+            width: 140,
+          ),
+
+          const Spacer(),
+
+          SizedBox(
+            width: 64,
+            child: Text(
+              '${item.quantity}주',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 18),
+
+          SizedBox(
+            width: 88,
+            height: 34,
             child: OutlinedButton(
               onPressed: () async {
                 await onCancelOrder(item.id);
               },
               style: OutlinedButton.styleFrom(
+                padding: EdgeInsets.zero,
                 foregroundColor: const Color(0xFFDC2626),
-                side: const BorderSide(
-                  color: Color(0xFFFECACA),
+                backgroundColor: buttonBgColor,
+                side: BorderSide(
+                  color: buttonBorderColor,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -184,43 +198,33 @@ class StockPendingOrderSection extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoBox({
+  Widget _buildInlineInfo({
     required String title,
     required String value,
+    required double width,
   }) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 8,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return SizedBox(
+      width: width,
+      child: Row(
         children: [
           Text(
-            title,
+            '$title ',
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
               color: Color(0xFF64748B),
             ),
           ),
-
-          const Spacer(),
-
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF111827),
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF111827),
+              ),
             ),
           ),
         ],
@@ -231,7 +235,7 @@ class StockPendingOrderSection extends StatelessWidget {
   Widget _buildEmptyMessage(String message) {
     return Container(
       width: double.infinity,
-      height: 80,
+      height: 64,
       alignment: Alignment.center,
       child: Text(
         message,

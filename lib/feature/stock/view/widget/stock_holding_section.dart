@@ -21,7 +21,7 @@ class StockHoldingSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -29,20 +29,20 @@ class StockHoldingSection extends StatelessWidget {
           const Text(
             '내 보유종목',
             style: TextStyle(
-              fontSize: 17,
+              fontSize: 16,
               fontWeight: FontWeight.w900,
               color: Color(0xFF111827),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           if (!isLoggedIn)
             _buildEmptyMessage('로그인 후 보유종목이 표시됩니다.')
           else if (holdingItems.isEmpty)
             _buildEmptyMessage('보유종목이 없습니다.')
           else
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               children: holdingItems.map((holding) {
                 final marketItem = _findMarketItemByCode(holding.stockCode);
 
@@ -74,13 +74,16 @@ class StockHoldingSection extends StatelessWidget {
           : () {
         onSelectHolding(marketItem);
       },
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(15),
       child: Container(
-        width: 320,
-        padding: const EdgeInsets.all(14),
+        width: 180,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 13,
+          vertical: 12,
+        ),
         decoration: BoxDecoration(
           color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(15),
           border: Border.all(color: const Color(0xFFE5E7EB)),
         ),
         child: Column(
@@ -96,7 +99,7 @@ class StockHoldingSection extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w900,
                       color: Color(0xFF111827),
                     ),
@@ -105,20 +108,20 @@ class StockHoldingSection extends StatelessWidget {
                 Text(
                   '${profitAmount >= 0 ? '+' : ''}${_formatPrice(profitAmount)}원',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w900,
                     color: profitColor,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 5),
             Row(
               children: [
                 Text(
                   '보유 ${holding.quantity}주',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF64748B),
                   ),
@@ -127,14 +130,14 @@ class StockHoldingSection extends StatelessWidget {
                 Text(
                   '${profitRate >= 0 ? '+' : ''}${profitRate.toStringAsFixed(2)}%',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w900,
                     color: profitColor,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 9),
             _buildInfoRow(
               title: '평균단가',
               value: '₩ ${_formatPrice(holding.averagePrice)}',
@@ -158,14 +161,14 @@ class StockHoldingSection extends StatelessWidget {
     required String value,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(top: 7),
+      padding: const EdgeInsets.only(top: 5),
       child: Row(
         children: [
           Expanded(
             child: Text(
               title,
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF64748B),
               ),
@@ -174,7 +177,7 @@ class StockHoldingSection extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w900,
               color: Color(0xFF111827),
             ),
@@ -198,7 +201,7 @@ class StockHoldingSection extends StatelessWidget {
   Widget _buildEmptyMessage(String message) {
     return Container(
       width: double.infinity,
-      height: 90,
+      height: 64,
       alignment: Alignment.center,
       child: Text(
         message,
