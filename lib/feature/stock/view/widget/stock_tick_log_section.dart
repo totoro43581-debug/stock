@@ -30,10 +30,14 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
   void initState() {
     super.initState();
 
+    // 수정80차: dispose 이후 타이머가 setState를 호출하지 않도록 즉시 종료 처리
     _flashTimer = Timer.periodic(
       const Duration(milliseconds: 500),
-          (_) {
-        if (!mounted) return;
+          (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
 
         setState(() {
           _flashVisible = !_flashVisible;
@@ -44,8 +48,11 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
 
   @override
   void dispose() {
-    widget.onHoverChanged(false);
+    // 수정80차: 타이머를 먼저 확실히 종료
     _flashTimer?.cancel();
+    _flashTimer = null;
+
+    widget.onHoverChanged(false);
     _scrollController.dispose();
     super.dispose();
   }
