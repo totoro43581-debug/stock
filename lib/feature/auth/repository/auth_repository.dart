@@ -7,28 +7,32 @@ class AuthRepository {
 
   final SupabaseClient _client = Supabase.instance.client;
 
-  // 수정1차: login_id로 profiles 조회 후 email로 로그인
+  // 수정82차: login_id 직접 profiles 조회 제거 → 로그인용 RPC로 email 조회
   Future<void> signInWithLoginId({
     required String loginId,
     required String password,
   }) async {
-    final profile = await _client
-        .from('profiles')
-        .select('email')
-        .eq('login_id', loginId)
-        .maybeSingle();
+    final trimmedLoginId = loginId.trim();
 
-    if (profile == null) {
+    if (trimmedLoginId.isEmpty) {
+      throw Exception('아이디를 입력해주세요.');
+    }
+
+    final email = await _client.rpc(
+      'get_login_email_by_login_id',
+      params: {
+        'p_login_id': trimmedLoginId,
+      },
+    );
+
+    final loginEmail = email as String?;
+
+    if (loginEmail == null || loginEmail.trim().isEmpty) {
       throw Exception('존재하지 않는 아이디입니다.');
     }
 
-    final email = profile['email'] as String?;
-    if (email == null || email.isEmpty) {
-      throw Exception('해당 아이디에 연결된 이메일이 없습니다.');
-    }
-
     await _client.auth.signInWithPassword(
-      email: email,
+      email: loginEmail.trim(),
       password: password,
     );
   }

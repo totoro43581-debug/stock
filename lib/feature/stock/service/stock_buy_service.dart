@@ -53,9 +53,6 @@ class StockBuyService {
     final bool isSameAsCurrentPrice = orderPrice == item.currentPrice;
 
     if (isSameAsCurrentPrice) {
-      print('### 지정가 즉시체결 분기 진입 ###');
-      print('현재가: ${item.currentPrice} / 주문가: $orderPrice');
-
       await tradeRepository.buyStock(
         userId: userId,
         stockCode: item.code,
@@ -63,8 +60,6 @@ class StockBuyService {
         price: orderPrice,
         quantity: quantity,
       );
-
-      print('### 지정가 즉시체결 buyStock 완료 ###');
 
       return '지정가 매수 체결: ${item.name} ${quantity}주';
     }

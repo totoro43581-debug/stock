@@ -136,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // 수정83차: 로그인 전 profiles 직접 조회 제거 → RPC로 이메일 조회
   Future<String?> _findEmailByLoginId(String loginId) async {
     final String trimmedId = loginId.trim();
 
@@ -143,17 +144,20 @@ class _HomeScreenState extends State<HomeScreen> {
       return null;
     }
 
-    final Map<String, dynamic>? result = await _supabase
-        .from('profiles')
-        .select('email')
-        .eq('login_id', trimmedId)
-        .maybeSingle();
+    final dynamic result = await _supabase.rpc(
+      'get_login_email_by_login_id',
+      params: {
+        'p_login_id': trimmedId,
+      },
+    );
 
-    if (result == null) {
+    final String? email = result as String?;
+
+    if (email == null || email.trim().isEmpty) {
       return null;
     }
 
-    return result['email']?.toString();
+    return email.trim();
   }
 
   Future<void> _handleLogin() async {
