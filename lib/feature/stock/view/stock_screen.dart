@@ -147,6 +147,7 @@ class _StockScreenState extends State<StockScreen> {
     } catch (_) {}
   }
 
+// 수정87차: 초기 진입 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
   Future<void> _loadInitialData() async {
     await _loadMarketItems();
     await _loadWallet();
@@ -155,8 +156,18 @@ class _StockScreenState extends State<StockScreen> {
     await _loadPendingOrders();
 
     try {
+      await _stockTradeRepository.processPendingOrders();
+    } catch (e) {
+      debugPrint('초기 기존 현재가 기준 지정가 자동체결 실패: $e');
+    }
+
+    await _loadWallet();
+    await _loadHoldings();
+    await _loadTradeHistory();
+    await _loadPendingOrders();
+
+    try {
       await _stockPriceRepository.simulateStockPrices();
-      debugPrint('가상 거래량 초기 갱신 성공');
     } catch (e) {
       debugPrint('가상 거래량 초기 갱신 실패: $e');
     }
@@ -166,9 +177,8 @@ class _StockScreenState extends State<StockScreen> {
 
     try {
       await _stockTradeRepository.processPendingOrders();
-      debugPrint('초기 지정가 자동체결 확인 성공');
     } catch (e) {
-      debugPrint('초기 지정가 자동체결 실패: $e');
+      debugPrint('초기 가격 갱신 후 지정가 자동체결 실패: $e');
     }
 
     await _loadWallet();
@@ -183,6 +193,7 @@ class _StockScreenState extends State<StockScreen> {
     });
   }
 
+// 수정87차: 1분 자동 갱신 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
   void _startRealtimePriceUpdate() {
     _realtimePriceTimer?.cancel();
 
@@ -196,24 +207,23 @@ class _StockScreenState extends State<StockScreen> {
         try {
           final beforeCount = _pendingOrderItems.length;
 
+          // 수정87차: 가격이 바뀌기 전, 이미 현재가와 맞아 있는 미체결 주문 우선 처리
+          await _stockTradeRepository.processPendingOrders();
+
+          await _loadPendingOrders();
+
+          if (_isLoggedIn) {
+            await _loadWallet();
+            await _loadHoldings();
+            await _loadTradeHistory();
+          }
+
+          // 수정87차: 1분 단위 가격/거래량 시뮬레이션 실행
           await _stockPriceRepository.simulateStockPrices();
 
           await _loadMarketItems();
 
-          debugPrint('### 실행중인 StockScreen 파일 확인 ###');
-          debugPrint('가상거래량 갱신 종목 수: ${_marketItems.length}');
-
-          for (final item in _marketItems) {
-            debugPrint(
-              '가상거래량 갱신 확인: '
-                  '${item.code} / '
-                  '${item.name} / '
-                  '거래량 ${item.tradeVolume} / '
-                  '가격 ${item.currentPrice} / '
-                  '등락률 ${item.changeRate}',
-            );
-          }
-
+          // 수정87차: 가격 변동 후 새로 주문가와 일치한 미체결 주문 재확인
           await _stockTradeRepository.processPendingOrders();
 
           await _loadPendingOrders();

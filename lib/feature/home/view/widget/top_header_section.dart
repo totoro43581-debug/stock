@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/bank/view/bank_screen.dart';
+
 
 class TopHeaderSection extends StatelessWidget {
   final Session? session;
@@ -98,13 +100,6 @@ class TopHeaderSection extends StatelessWidget {
             _HeaderMenuButton(
               text: '주식',
               menuKey: 'stock',
-              selectedMenu: selectedMenu,
-              onTap: onMenuSelected,
-            ),
-            const SizedBox(width: 28),
-            _HeaderMenuButton(
-              text: 'ETF',
-              menuKey: 'etf',
               selectedMenu: selectedMenu,
               onTap: onMenuSelected,
             ),

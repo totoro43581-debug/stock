@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/bank/view/bank_screen.dart';
 import 'package:stock/feature/stock/view/stock_screen.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 
@@ -13,8 +14,6 @@ import '../../auth/view/widget/login_card_section.dart';
 import 'widget/my_asset_card_section.dart';
 import '../../auth/view/widget/register_view_section.dart';
 import 'widget/top_header_section.dart';
-
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -136,6 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // 수정83차: 로그인 전 profiles 직접 조회 제거 → RPC로 이메일 조회
   Future<String?> _findEmailByLoginId(String loginId) async {
     final String trimmedId = loginId.trim();
 
@@ -143,17 +143,20 @@ class _HomeScreenState extends State<HomeScreen> {
       return null;
     }
 
-    final Map<String, dynamic>? result = await _supabase
-        .from('profiles')
-        .select('email')
-        .eq('login_id', trimmedId)
-        .maybeSingle();
+    final dynamic result = await _supabase.rpc(
+      'get_login_email_by_login_id',
+      params: {
+        'p_login_id': trimmedId,
+      },
+    );
 
-    if (result == null) {
+    final String? email = result as String?;
+
+    if (email == null || email.trim().isEmpty) {
       return null;
     }
 
-    return result['email']?.toString();
+    return email.trim();
   }
 
   Future<void> _handleLogin() async {
@@ -176,7 +179,8 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('존재하지 않는 아이디입니다.');
       }
 
-      final AuthResponse authResponse = await _supabase.auth.signInWithPassword(
+      final AuthResponse authResponse =
+      await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
@@ -187,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('로그인 사용자 정보를 가져오지 못했습니다.');
       }
 
-// 수정8차: 로그인 직후 wallet 자동 생성 보장
+      // 수정8차: 로그인 직후 wallet 자동 생성 보장
       await WalletRepository().ensureWallet(user.id);
 
       if (!mounted) return;
@@ -418,11 +422,8 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'stock':
         return const StockScreen();
 
-      case 'etf':
-        return _buildPreparingContent('ETF');
-
       case 'saving':
-        return _buildPreparingContent('예금/적금');
+        return const BankScreen();
 
       case 'real_estate':
         return _buildPreparingContent('부동산');
@@ -478,7 +479,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: session == null
                               ? LoginCardSection(
                             idController: _loginIdController,
-                            passwordController: _loginPasswordController,
+                            passwordController:
+                            _loginPasswordController,
                             errorMessage: _errorMessage,
                             isLoading: _isLoading,
                             onTapLogin: _handleLogin,
@@ -499,7 +501,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       session == null
                           ? LoginCardSection(
                         idController: _loginIdController,
-                        passwordController: _loginPasswordController,
+                        passwordController:
+                        _loginPasswordController,
                         errorMessage: _errorMessage,
                         isLoading: _isLoading,
                         onTapLogin: _handleLogin,
@@ -515,7 +518,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTapStock: () => _handleMenuSelected('stock'),
                   onTapEtf: () => _handleMenuSelected('etf'),
                   onTapSaving: () => _handleMenuSelected('saving'),
-                  onTapRealEstate: () => _handleMenuSelected('real_estate'),
+                  onTapRealEstate: () =>
+                      _handleMenuSelected('real_estate'),
                   onTapReport: () => _handleMenuSelected('report'),
                   onTapAsset: () => _handleMenuSelected('asset'),
                 ),

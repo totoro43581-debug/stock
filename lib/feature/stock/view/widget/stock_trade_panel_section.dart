@@ -273,7 +273,8 @@ class StockTradePanelSection extends StatelessWidget {
             ],
           ),
 
-          const SizedBox(height: 12),
+          // 수정86차: 주문 패널 하단 3px overflow 방지를 위해 여백 12 → 10 축소
+          const SizedBox(height: 10),
 
           Container(
             width: double.infinity,
@@ -317,7 +318,8 @@ class StockTradePanelSection extends StatelessWidget {
             statusText: statusText,
           ),
 
-          const SizedBox(height: 6),
+          // 수정86차: 주문 패널 하단 3px overflow 방지를 위해 여백 6 → 4 축소
+          const SizedBox(height: 4),
 
           SizedBox(
             width: double.infinity,
@@ -507,8 +509,9 @@ class StockTradePanelSection extends StatelessWidget {
         color: isBuyOrder ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color:
-          isBuyOrder ? const Color(0xFFBBF7D0) : const Color(0xFFFECACA),
+          color: isBuyOrder
+              ? const Color(0xFFBBF7D0)
+              : const Color(0xFFFECACA),
         ),
       ),
       child: Column(
