@@ -147,7 +147,7 @@ class _StockScreenState extends State<StockScreen> {
     } catch (_) {}
   }
 
-// 수정87차: 초기 진입 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
+  // 수정87차: 초기 진입 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
   Future<void> _loadInitialData() async {
     await _loadMarketItems();
     await _loadWallet();
@@ -193,78 +193,75 @@ class _StockScreenState extends State<StockScreen> {
     });
   }
 
-// 수정87차: 1분 자동 갱신 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
+  // 수정87차: 1분 자동 갱신 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
   void _startRealtimePriceUpdate() {
     _realtimePriceTimer?.cancel();
 
-    _realtimePriceTimer = Timer.periodic(
-      const Duration(minutes: 1),
-          (_) async {
-        if (!mounted || _isRealtimeUpdating) return;
+    _realtimePriceTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      if (!mounted || _isRealtimeUpdating) return;
 
-        _isRealtimeUpdating = true;
+      _isRealtimeUpdating = true;
 
-        try {
-          final beforeCount = _pendingOrderItems.length;
+      try {
+        final beforeCount = _pendingOrderItems.length;
 
-          // 수정87차: 가격이 바뀌기 전, 이미 현재가와 맞아 있는 미체결 주문 우선 처리
-          await _stockTradeRepository.processPendingOrders();
+        // 수정87차: 가격이 바뀌기 전, 이미 현재가와 맞아 있는 미체결 주문 우선 처리
+        await _stockTradeRepository.processPendingOrders();
 
-          await _loadPendingOrders();
+        await _loadPendingOrders();
 
-          if (_isLoggedIn) {
-            await _loadWallet();
-            await _loadHoldings();
-            await _loadTradeHistory();
-          }
-
-          // 수정87차: 1분 단위 가격/거래량 시뮬레이션 실행
-          await _stockPriceRepository.simulateStockPrices();
-
-          await _loadMarketItems();
-
-          // 수정87차: 가격 변동 후 새로 주문가와 일치한 미체결 주문 재확인
-          await _stockTradeRepository.processPendingOrders();
-
-          await _loadPendingOrders();
-
-          if (_isLoggedIn) {
-            await _loadWallet();
-            await _loadHoldings();
-            await _loadTradeHistory();
-          }
-
-          final afterCount = _pendingOrderItems.length;
-
-          if (mounted && beforeCount > afterCount) {
-            _showSnackBar('지정가 주문이 체결되었습니다.');
-          }
-
-          final selectedItem = _selectedMarketItem;
-          if (selectedItem != null) {
-            await _loadStockChart(
-              selectedItem.id,
-              selectedItem.name,
-              showLoading: false,
-            );
-          }
-
-          if (!mounted) return;
-
-          setState(() {
-            _lastRealtimeUpdatedAt = DateTime.now();
-          });
-        } catch (e) {
-          debugPrint('가상 거래량 자동 갱신 실패: $e');
-
-          if (mounted) {
-            _showSnackBar('가상 거래량 갱신 실패: $e');
-          }
-        } finally {
-          _isRealtimeUpdating = false;
+        if (_isLoggedIn) {
+          await _loadWallet();
+          await _loadHoldings();
+          await _loadTradeHistory();
         }
-      },
-    );
+
+        // 수정87차: 1분 단위 가격/거래량 시뮬레이션 실행
+        await _stockPriceRepository.simulateStockPrices();
+
+        await _loadMarketItems();
+
+        // 수정87차: 가격 변동 후 새로 주문가와 일치한 미체결 주문 재확인
+        await _stockTradeRepository.processPendingOrders();
+
+        await _loadPendingOrders();
+
+        if (_isLoggedIn) {
+          await _loadWallet();
+          await _loadHoldings();
+          await _loadTradeHistory();
+        }
+
+        final afterCount = _pendingOrderItems.length;
+
+        if (mounted && beforeCount > afterCount) {
+          _showSnackBar('지정가 주문이 체결되었습니다.');
+        }
+
+        final selectedItem = _selectedMarketItem;
+        if (selectedItem != null) {
+          await _loadStockChart(
+            selectedItem.id,
+            selectedItem.name,
+            showLoading: false,
+          );
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          _lastRealtimeUpdatedAt = DateTime.now();
+        });
+      } catch (e) {
+        debugPrint('가상 거래량 자동 갱신 실패: $e');
+
+        if (mounted) {
+          _showSnackBar('가상 거래량 갱신 실패: $e');
+        }
+      } finally {
+        _isRealtimeUpdating = false;
+      }
+    });
   }
 
   Future<void> _loadMarketItems() async {
@@ -279,15 +276,27 @@ class _StockScreenState extends State<StockScreen> {
           market: _mapMarketLabel((row['market'] ?? '').toString()),
           currentPrice: ((row['current_price'] ?? 0) as num).toDouble(),
           changeRate: ((row['change_rate'] ?? 0) as num).toDouble(),
-          virtualBuyVolume:
-          ((row['virtual_buy_volume'] ?? 0) as num).toInt(),
-          virtualSellVolume:
-          ((row['virtual_sell_volume'] ?? 0) as num).toInt(),
+          virtualBuyVolume: ((row['virtual_buy_volume'] ?? 0) as num).toInt(),
+          virtualSellVolume: ((row['virtual_sell_volume'] ?? 0) as num).toInt(),
           tradeVolume: ((row['trade_volume'] ?? 0) as num).toInt(),
           tradeAmount: ((row['trade_amount'] ?? 0) as num).toDouble(),
-          description: (row['market'] ?? '').toString().isEmpty
-              ? ''
-              : '${(row['market'] ?? '').toString()} 종목',
+
+          // 수정88차: 현실형 가상 종목 정보 매핑
+          description:
+              (row['company_description'] ?? '').toString().trim().isEmpty
+              ? '등록된 기업 설명이 없습니다.'
+              : (row['company_description'] ?? '').toString(),
+          stockType: (row['stock_type'] ?? 'domestic_large').toString(),
+          sector: (row['sector'] ?? 'general').toString(),
+          marketCapLevel: (row['market_cap_level'] ?? 'mid').toString(),
+          volatilityLevel: (row['volatility_level'] ?? 'normal').toString(),
+          growthScore: ((row['growth_score'] ?? 50) as num).toInt(),
+          stabilityScore: ((row['stability_score'] ?? 50) as num).toInt(),
+          newsSensitivity: ((row['news_sensitivity'] ?? 1.00) as num)
+              .toDouble(),
+          delistingRiskScore: ((row['delisting_risk_score'] ?? 0) as num)
+              .toInt(),
+          listingStatus: (row['listing_status'] ?? 'listed').toString(),
         );
       }).toList();
 
@@ -308,7 +317,7 @@ class _StockScreenState extends State<StockScreen> {
 
           try {
             _selectedMarketItem = items.firstWhere(
-                  (item) => item.code == selectedCode,
+              (item) => item.code == selectedCode,
             );
           } catch (_) {}
         }
@@ -470,10 +479,10 @@ class _StockScreenState extends State<StockScreen> {
 
   // 수정74차: 자동갱신 시 차트 전체 깜빡임 방지
   Future<void> _loadStockChart(
-      String stockId,
-      String stockName, {
-        bool showLoading = true,
-      }) async {
+    String stockId,
+    String stockName, {
+    bool showLoading = true,
+  }) async {
     if (showLoading) {
       setState(() {
         _isChartLoading = true;
@@ -679,20 +688,9 @@ class _StockScreenState extends State<StockScreen> {
     } else if (_selectedMarketFilter == '해외주식') {
       result = result.where((item) => item.market == '해외').toList();
     } else if (_selectedMarketFilter == 'ETF') {
-      result = result.where((item) {
-        return item.name.toUpperCase().contains('ETF') ||
-            item.description.toUpperCase().contains('ETF');
-      }).toList();
+      result = result.where((item) => item.stockType == 'etf').toList();
     } else if (_selectedMarketFilter == '테마주') {
-      result = result.where((item) {
-        return item.description.contains('테마') ||
-            item.description.contains('AI') ||
-            item.description.contains('반도체') ||
-            item.description.contains('2차전지') ||
-            item.description.contains('바이오') ||
-            item.description.contains('로봇') ||
-            item.description.contains('게임');
-      }).toList();
+      result = result.where((item) => item.stockType == 'theme').toList();
     }
 
     final keyword = _searchController.text.trim().toLowerCase();
@@ -700,7 +698,8 @@ class _StockScreenState extends State<StockScreen> {
     if (keyword.isNotEmpty) {
       result = result.where((item) {
         return item.name.toLowerCase().contains(keyword) ||
-            item.code.toLowerCase().contains(keyword);
+            item.code.toLowerCase().contains(keyword) ||
+            item.description.toLowerCase().contains(keyword);
       }).toList();
     }
 
@@ -802,18 +801,21 @@ class _StockScreenState extends State<StockScreen> {
     }
 
     if (_isBuyOrder) {
-      final int maxBuyQuantity =
-      _orderPrice <= 0 ? 0 : (_availableBuyCash / _orderPrice).floor();
+      final int maxBuyQuantity = _orderPrice <= 0
+          ? 0
+          : (_availableBuyCash / _orderPrice).floor();
 
-      _quantityController.text =
-      maxBuyQuantity <= 0 ? '' : maxBuyQuantity.toString();
+      _quantityController.text = maxBuyQuantity <= 0
+          ? ''
+          : maxBuyQuantity.toString();
       return;
     }
 
     final int maxSellQuantity = _availableSellQuantity;
 
-    _quantityController.text =
-    maxSellQuantity <= 0 ? '' : maxSellQuantity.toString();
+    _quantityController.text = maxSellQuantity <= 0
+        ? ''
+        : maxSellQuantity.toString();
   }
 
   Future<void> _handleBuy() async {
@@ -936,9 +938,7 @@ class _StockScreenState extends State<StockScreen> {
       height: double.infinity,
       color: Colors.white,
       child: ScrollConfiguration(
-        behavior: const MaterialScrollBehavior().copyWith(
-          scrollbars: false,
-        ),
+        behavior: const MaterialScrollBehavior().copyWith(scrollbars: false),
         child: NotificationListener<ScrollNotification>(
           onNotification: (_) {
             _lockPageScrollWhileTickHovered();
@@ -953,9 +953,7 @@ class _StockScreenState extends State<StockScreen> {
             children: [
               Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: _pageMaxWidth,
-                  ),
+                  constraints: const BoxConstraints(maxWidth: _pageMaxWidth),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -980,8 +978,8 @@ class _StockScreenState extends State<StockScreen> {
                             _selectedOrderPrice = null;
                             _manualOrderPrice = null;
 
-                            _priceController.text =
-                                item.currentPrice.toStringAsFixed(0);
+                            _priceController.text = item.currentPrice
+                                .toStringAsFixed(0);
                           });
 
                           _loadStockChart(item.id, item.name);
@@ -1084,7 +1082,14 @@ class _StockScreenState extends State<StockScreen> {
             ),
           ],
         ),
+
         const SizedBox(height: _gap),
+
+        // 수정88차: 선택 종목 기업 설명 카드
+        _buildSelectedStockInfoSection(),
+
+        const SizedBox(height: _gap),
+
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1143,6 +1148,398 @@ class _StockScreenState extends State<StockScreen> {
         ),
       ],
     );
+  }
+
+  // 수정88차: 선택 종목 기업 정보 카드
+  Widget _buildSelectedStockInfoSection() {
+    final item = _selectedMarketItem;
+
+    if (item == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: const Text(
+          '종목을 선택하면 기업 설명이 표시됩니다.',
+          style: TextStyle(
+            fontSize: 14,
+            color: Color(0xFF6B7280),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                '선택 종목 정보',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF111827),
+                ),
+              ),
+              const Spacer(),
+              _buildListingStatusBadge(item.listingStatus),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                item.name,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF111827),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  item.code,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStockInfoCard(
+                  label: '종목 분류',
+                  value: _stockTypeLabel(item.stockType),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStockInfoCard(
+                  label: '업종',
+                  value: _sectorLabel(item.sector),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStockInfoCard(
+                  label: '규모',
+                  value: _marketCapLabel(item.marketCapLevel),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStockInfoCard(
+                  label: '변동성',
+                  value: _volatilityLabel(item.volatilityLevel),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Text(
+              item.description,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.65,
+                color: Color(0xFF374151),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStockMetricCard(
+                  label: '성장성',
+                  value: '${item.growthScore}점',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStockMetricCard(
+                  label: '안정성',
+                  value: '${item.stabilityScore}점',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStockMetricCard(
+                  label: '뉴스 민감도',
+                  value: '× ${item.newsSensitivity.toStringAsFixed(2)}',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStockMetricCard(
+                  label: '상폐 위험도',
+                  value: '${item.delistingRiskScore}점',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStockInfoCard({required String label, required String value}) {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF111827),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListingStatusBadge(String status) {
+    final String label = _listingStatusLabel(status);
+    final Color backgroundColor = _listingStatusBackgroundColor(status);
+    final Color textColor = _listingStatusTextColor(status);
+
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStockMetricCard({required String label, required String value}) {
+    return Container(
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF111827),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _stockTypeLabel(String value) {
+    switch (value) {
+      case 'domestic_large':
+        return '국내 대형주';
+      case 'domestic_growth':
+        return '국내 성장주';
+      case 'domestic_penny':
+        return '국내 잡주';
+      case 'overseas_large':
+        return '해외 대형주';
+      case 'overseas_growth':
+        return '해외 성장주';
+      case 'overseas_penny':
+        return '해외 잡주';
+      case 'theme':
+        return '테마주';
+      case 'etf':
+        return 'ETF';
+      default:
+        return '기타';
+    }
+  }
+
+  String _sectorLabel(String value) {
+    switch (value) {
+      case 'semiconductor':
+        return '반도체';
+      case 'platform':
+        return '플랫폼';
+      case 'automobile':
+        return '자동차';
+      case 'battery':
+        return '2차전지';
+      case 'bio':
+        return '바이오';
+      case 'finance':
+        return '금융';
+      case 'defense':
+        return '방산';
+      case 'energy':
+        return '에너지';
+      case 'game':
+        return '게임';
+      case 'robot':
+        return '로봇';
+      default:
+        return '종합';
+    }
+  }
+
+  String _marketCapLabel(String value) {
+    switch (value) {
+      case 'mega':
+        return '초대형';
+      case 'large':
+        return '대형';
+      case 'mid':
+        return '중형';
+      case 'small':
+        return '소형';
+      case 'micro':
+        return '초소형';
+      case 'index':
+        return '지수형';
+      default:
+        return '미분류';
+    }
+  }
+
+  String _volatilityLabel(String value) {
+    switch (value) {
+      case 'stable':
+        return '낮음';
+      case 'normal':
+        return '보통';
+      case 'high':
+        return '높음';
+      case 'extreme':
+        return '매우 높음';
+      default:
+        return '보통';
+    }
+  }
+
+  String _listingStatusLabel(String value) {
+    switch (value) {
+      case 'pre_listing':
+        return '상장예정';
+      case 'listed':
+        return '정상상장';
+      case 'warning':
+        return '투자경고';
+      case 'suspended':
+        return '거래정지';
+      case 'delisted':
+        return '상장폐지';
+      default:
+        return '상태미정';
+    }
+  }
+
+  Color _listingStatusBackgroundColor(String value) {
+    switch (value) {
+      case 'listed':
+        return const Color(0xFFDCFCE7);
+      case 'warning':
+        return const Color(0xFFFEF3C7);
+      case 'suspended':
+        return const Color(0xFFFEE2E2);
+      case 'delisted':
+        return const Color(0xFFE5E7EB);
+      case 'pre_listing':
+        return const Color(0xFFDBEAFE);
+      default:
+        return const Color(0xFFF3F4F6);
+    }
+  }
+
+  Color _listingStatusTextColor(String value) {
+    switch (value) {
+      case 'listed':
+        return const Color(0xFF15803D);
+      case 'warning':
+        return const Color(0xFFB45309);
+      case 'suspended':
+        return const Color(0xFFDC2626);
+      case 'delisted':
+        return const Color(0xFF4B5563);
+      case 'pre_listing':
+        return const Color(0xFF1D4ED8);
+      default:
+        return const Color(0xFF374151);
+    }
   }
 
   Widget _buildBottomTradingArea() {

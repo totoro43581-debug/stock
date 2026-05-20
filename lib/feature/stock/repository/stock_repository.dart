@@ -6,11 +6,33 @@ class StockRepository {
   // 수정1차: 초기 지급금
   static const double _initialCashBalance = 2000000;
 
+  // 수정88차: 현실형 가상 종목 정보 컬럼 포함
   Future<List<Map<String, dynamic>>> fetchActiveStocks() async {
     final response = await _client
         .from('stock_item')
         .select(
-      'id, code, name, market, current_price, change_rate, virtual_buy_volume, virtual_sell_volume, trade_volume, trade_amount',
+      '''
+          id,
+          code,
+          name,
+          market,
+          current_price,
+          change_rate,
+          virtual_buy_volume,
+          virtual_sell_volume,
+          trade_volume,
+          trade_amount,
+          company_description,
+          stock_type,
+          sector,
+          market_cap_level,
+          volatility_level,
+          growth_score,
+          stability_score,
+          news_sensitivity,
+          delisting_risk_score,
+          listing_status
+          ''',
     )
         .eq('is_active', true)
         .order('market', ascending: true)
