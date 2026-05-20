@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/account/repository/asset_account_repository.dart';
 import 'package:stock/feature/bank/view/bank_screen.dart';
 import 'package:stock/feature/stock/view/stock_screen.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
@@ -25,6 +26,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showRegisterView = false;
   String _selectedMenu = 'home';
+
+  final AssetAccountRepository _assetAccountRepository =
+  AssetAccountRepository();
 
   final TextEditingController _loginIdController = TextEditingController();
   final TextEditingController _loginPasswordController =
@@ -53,9 +57,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
+    // 수정1차: 기존 로그인 세션이 남아 있는 경우 기본 자산계좌 보장
+    if (_supabase.auth.currentSession != null) {
+      _ensureUserAssetAccounts();
+    }
+
     _authStateSubscription =
         _supabase.auth.onAuthStateChange.listen((AuthState data) {
           if (!mounted) return;
+
+          if (data.session != null) {
+            // 수정1차: 로그인 상태 진입 시 기본 자산계좌 3개 보장
+            _ensureUserAssetAccounts();
+          }
 
           setState(() {
             if (data.session != null) {
@@ -79,6 +93,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _authStateSubscription?.cancel();
     super.dispose();
+  }
+
+  // 수정1차: 은행계좌 / 주식계좌 / 코인계좌 자동 생성 보장
+  Future<void> _ensureUserAssetAccounts() async {
+    try {
+      await _assetAccountRepository.ensureUserAssetAccounts();
+    } catch (e) {
+      debugPrint('기본 자산계좌 생성 실패: $e');
+    }
   }
 
   void _openRegisterView() {
@@ -193,6 +216,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // 수정8차: 로그인 직후 wallet 자동 생성 보장
       await WalletRepository().ensureWallet(user.id);
+
+      // 수정1차: 로그인 직후 기본 자산계좌 3개 자동 생성 보장
+      await _assetAccountRepository.ensureUserAssetAccounts();
 
       if (!mounted) return;
 
@@ -592,4 +618,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
+}|

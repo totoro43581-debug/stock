@@ -131,17 +131,28 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
           child: TextField(
             controller: widget.searchController,
             onChanged: (_) => widget.onSearchChanged(),
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111827),
+            ),
             decoration: InputDecoration(
               hintText: '종목명 / 코드 검색',
-              hintStyle: const TextStyle(fontSize: 12),
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF94A3B8),
+              ),
               prefixIcon: const Icon(
                 Icons.search_rounded,
                 size: 18,
+                color: Color(0xFF64748B),
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
               ),
+              filled: true,
+              fillColor: Colors.white,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(11),
                 borderSide: const BorderSide(
@@ -152,6 +163,12 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
                 borderRadius: BorderRadius.circular(11),
                 borderSide: const BorderSide(
                   color: Color(0xFFE5E7EB),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(11),
+                borderSide: const BorderSide(
+                  color: Color(0xFFCBD5E1),
                 ),
               ),
             ),
@@ -194,38 +211,97 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
     );
   }
 
+  // 수정89차: 기본 DropdownButton 제거
+  // 흰색 카드 톤에 맞춘 커스텀 팝업 메뉴 적용
   Widget _buildSmallSelect({
     required String value,
     required List<String> items,
     required ValueChanged<String?> onChanged,
   }) {
-    return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
+    return PopupMenuButton<String>(
+      tooltip: '',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 6),
+      color: Colors.white,
+      surfaceTintColor: Colors.white,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(
+          color: Color(0xFFE5E7EB),
         ),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          items: items
-              .map(
-                (item) => DropdownMenuItem(
-              value: item,
-              child: Text(item),
+      constraints: const BoxConstraints(
+        minWidth: 160,
+        maxWidth: 220,
+      ),
+      onSelected: (selectedValue) {
+        onChanged(selectedValue);
+      },
+      itemBuilder: (context) {
+        return items.map((item) {
+          final bool selected = item == value;
+
+          return PopupMenuItem<String>(
+            value: item,
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Container(
+              width: double.infinity,
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerLeft,
+              decoration: BoxDecoration(
+                color: selected
+                    ? const Color(0xFFEFF6FF)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                item,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
+                  color: selected
+                      ? const Color(0xFF2563EB)
+                      : const Color(0xFF111827),
+                ),
+              ),
             ),
-          )
-              .toList(),
-          onChanged: onChanged,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF111827),
+          );
+        }).toList();
+      },
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFFE5E7EB),
           ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF111827),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: Color(0xFF475569),
+            ),
+          ],
         ),
       ),
     );
@@ -241,8 +317,8 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
         widget.onSelectItem(item);
       },
       child: Container(
-        height: 82,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        height: 58,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         color: selected ? const Color(0xFFEFF6FF) : Colors.white,
         child: Row(
           children: [
@@ -258,81 +334,92 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF111827),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    item.code,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '거래량 ${_formatVolume(item.tradeVolume)}',
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '체결강도 ${_formatTradeStrength(item.virtualBuyVolume, item.virtualSellVolume)}',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: _tradeStrengthColor(
-                        item.virtualBuyVolume,
-                        item.virtualSellVolume,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '거래량 ${_formatVolume(item.tradeVolume)}  ·  체결강도 ${_formatTradeStrength(item.virtualBuyVolume, item.virtualSellVolume)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: _tradeStrengthColor(
+                              item.virtualBuyVolume,
+                              item.virtualSellVolume,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '₩ ${_formatPrice(item.currentPrice)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        item.code,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _formatSignedPercent(item.changeRate),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: _changeColor(item.changeRate),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '대금 ${_formatTradeAmount(item.tradeAmount)}',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      if (holdingQty > 0) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '${holdingQty}주',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
-            ),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '₩ ${_formatPrice(item.currentPrice)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${_formatSignedPercent(item.changeRate)} · ${holdingQty}주',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: _changeColor(item.changeRate),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '대금 ${_formatTradeAmount(item.tradeAmount)}',
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ],
             ),
           ],
         ),

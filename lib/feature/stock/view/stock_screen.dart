@@ -684,9 +684,17 @@ class _StockScreenState extends State<StockScreen> {
     List<StockItemViewModel> result = List.of(_marketItems);
 
     if (_selectedMarketFilter == '국내주식') {
-      result = result.where((item) => item.market == '국내').toList();
+      result = result.where((item) {
+        return item.stockType == 'domestic_large' ||
+            item.stockType == 'domestic_growth' ||
+            item.stockType == 'domestic_penny';
+      }).toList();
     } else if (_selectedMarketFilter == '해외주식') {
-      result = result.where((item) => item.market == '해외').toList();
+      result = result.where((item) {
+        return item.stockType == 'overseas_large' ||
+            item.stockType == 'overseas_growth' ||
+            item.stockType == 'overseas_penny';
+      }).toList();
     } else if (_selectedMarketFilter == 'ETF') {
       result = result.where((item) => item.stockType == 'etf').toList();
     } else if (_selectedMarketFilter == '테마주') {
