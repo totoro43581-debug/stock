@@ -41,6 +41,60 @@ class StockRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  // 수정89차: 미적용 뉴스 1건을 주가에 반영
+  Future<Map<String, dynamic>> applyNextStockNewsEvent() async {
+    final response = await _client.rpc('apply_next_stock_news_event');
+
+    if (response == null) {
+      return {
+        'success': false,
+        'message': '뉴스 반영 결과가 없습니다.',
+        'applied_count': 0,
+      };
+    }
+
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  // 수정90차: 최근 시장 뉴스 조회
+  Future<List<Map<String, dynamic>>> fetchRecentStockNewsEvents() async {
+    final response = await _client
+        .from('stock_news_events')
+        .select(
+      '''
+          id,
+          news_code,
+          title,
+          content,
+          body,
+          news_type,
+          source_type,
+          source_label,
+          impact_direction,
+          importance_level,
+          status,
+          target_type,
+          target_value,
+          sentiment,
+          min_impact_rate,
+          max_impact_rate,
+          volume_multiplier,
+          is_applied,
+          is_price_applied,
+          is_visible,
+          is_real_world_based,
+          created_at,
+          applied_at,
+          published_at
+          ''',
+    )
+        .eq('is_visible', true)
+        .order('created_at', ascending: false)
+        .limit(8);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   // 수정1차: 사용자 지갑 보장
   Future<void> ensureUserWallet() async {
     final user = _client.auth.currentUser;

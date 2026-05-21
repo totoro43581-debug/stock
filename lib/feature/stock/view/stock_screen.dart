@@ -12,7 +12,6 @@ import 'package:stock/feature/stock/repository/stock_repository.dart';
 import 'package:stock/feature/stock/repository/stock_trade_repository.dart';
 import 'package:stock/feature/stock/service/stock_buy_service.dart';
 import 'package:stock/feature/stock/service/stock_sell_service.dart';
-import 'package:stock/feature/stock/view/stock_register_screen.dart';
 import 'package:stock/feature/stock/view/widget/stock_chart_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_holding_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_market_list_section.dart';
@@ -72,6 +71,9 @@ class _StockScreenState extends State<StockScreen> {
   List<StockCandleModel> _selectedStockPrices = [];
   List<StockPendingOrderModel> _pendingOrderItems = [];
 
+  // 수정90차: 최근 시장 뉴스
+  List<Map<String, dynamic>> _recentNewsItems = [];
+
   StockItemViewModel? _selectedMarketItem;
   double? _selectedOrderPrice;
   double? _manualOrderPrice;
@@ -81,6 +83,9 @@ class _StockScreenState extends State<StockScreen> {
   String _selectedMarketFilter = '전체';
   String _selectedSort = '이름';
   String _selectedChartRange = '전체';
+
+  // 수정91차: 주식 정보 통합 탭
+  String _selectedInfoTab = 'info';
 
   int _tradeHistoryPage = 0;
   static const int _tradeHistoryPageSize = 9;
@@ -95,6 +100,9 @@ class _StockScreenState extends State<StockScreen> {
 
   static const double _pageMaxWidth = 1480;
   static const double _gap = 14;
+
+// 수정92차: 정보 통합 탭 본문 고정 높이
+  static const double _infoTabBodyHeight = 280;
 
   void _handleTickLogHoverChanged(bool isHovered) {
     if (!_pageScrollController.hasClients) return;
@@ -167,7 +175,7 @@ class _StockScreenState extends State<StockScreen> {
     await _loadPendingOrders();
 
     try {
-      await _stockPriceRepository.simulateStockPrices();
+      await _applyNewsOrSimulatePriceUpdate();
     } catch (e) {
       debugPrint('가상 거래량 초기 갱신 실패: $e');
     }
@@ -185,12 +193,29 @@ class _StockScreenState extends State<StockScreen> {
     await _loadHoldings();
     await _loadTradeHistory();
     await _loadPendingOrders();
+    await _loadRecentNewsItems();
 
     if (!mounted) return;
 
     setState(() {
       _lastRealtimeUpdatedAt = DateTime.now();
     });
+  }
+
+  // 수정89차: 뉴스가 있으면 뉴스 반영, 없으면 기존 가상 거래량 가격 갱신
+  Future<void> _applyNewsOrSimulatePriceUpdate() async {
+    final newsResult = await _stockRepository.applyNextStockNewsEvent();
+
+    final bool success = newsResult['success'] == true;
+    final int appliedCount = ((newsResult['applied_count'] ?? 0) as num)
+        .toInt();
+
+    if (success && appliedCount > 0) {
+      debugPrint('뉴스 주가 반영 완료: ${newsResult['title']} / 적용 종목 $appliedCount개');
+      return;
+    }
+
+    await _stockPriceRepository.simulateStockPrices();
   }
 
   // 수정87차: 1분 자동 갱신 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
@@ -217,9 +242,10 @@ class _StockScreenState extends State<StockScreen> {
         }
 
         // 수정87차: 1분 단위 가격/거래량 시뮬레이션 실행
-        await _stockPriceRepository.simulateStockPrices();
+        await _applyNewsOrSimulatePriceUpdate();
 
         await _loadMarketItems();
+        await _loadRecentNewsItems();
 
         // 수정87차: 가격 변동 후 새로 주문가와 일치한 미체결 주문 재확인
         await _stockTradeRepository.processPendingOrders();
@@ -431,6 +457,21 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  // 수정90차: 최근 시장 뉴스 조회
+  Future<void> _loadRecentNewsItems() async {
+    try {
+      final newsItems = await _stockRepository.fetchRecentStockNewsEvents();
+
+      if (!mounted) return;
+
+      setState(() {
+        _recentNewsItems = newsItems;
+      });
+    } catch (e) {
+      debugPrint('최근 시장 뉴스 조회 실패: $e');
+    }
+  }
+
   Future<void> _cancelPendingOrder(String orderId) async {
     if (_user == null) {
       _showSnackBar('로그인이 필요합니다.');
@@ -523,6 +564,7 @@ class _StockScreenState extends State<StockScreen> {
     await _loadHoldings();
     await _loadTradeHistory();
     await _loadPendingOrders();
+    await _loadRecentNewsItems();
 
     final selectedItem = _selectedMarketItem;
 
@@ -973,9 +1015,7 @@ class _StockScreenState extends State<StockScreen> {
                         totalProfitRate: _totalProfitRate,
                         isWalletLoading: _isWalletLoading,
                       ),
-
                       const SizedBox(height: _gap),
-
                       StockHoldingSection(
                         holdingItems: _holdingItems,
                         marketItems: _marketItems,
@@ -985,7 +1025,6 @@ class _StockScreenState extends State<StockScreen> {
                             _selectedMarketItem = item;
                             _selectedOrderPrice = null;
                             _manualOrderPrice = null;
-
                             _priceController.text = item.currentPrice
                                 .toStringAsFixed(0);
                           });
@@ -993,25 +1032,8 @@ class _StockScreenState extends State<StockScreen> {
                           _loadStockChart(item.id, item.name);
                         },
                       ),
-
                       const SizedBox(height: _gap),
-
                       _buildTradingLayout(filteredItems),
-
-                      const SizedBox(height: _gap),
-
-                      StockPendingOrderSection(
-                        pendingOrders: _pendingOrderItems,
-                        isLoggedIn: _isLoggedIn,
-                        onCancelOrder: _cancelPendingOrder,
-                      ),
-
-                      const SizedBox(height: _gap),
-
-                      StockTickLogSection(
-                        tradeHistoryItems: _tradeHistoryItems,
-                        onHoverChanged: _handleTickLogHoverChanged,
-                      ),
                     ],
                   ),
                 ),
@@ -1090,14 +1112,12 @@ class _StockScreenState extends State<StockScreen> {
             ),
           ],
         ),
-
         const SizedBox(height: _gap),
 
-        // 수정88차: 선택 종목 기업 설명 카드
-        _buildSelectedStockInfoSection(),
+        // 수정91차: 선택 종목 정보 / 뉴스 / 미체결 / 실시간 체결 통합 탭
+        _buildStockInfoTabSection(),
 
         const SizedBox(height: _gap),
-
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1158,30 +1178,8 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  // 수정88차: 선택 종목 기업 정보 카드
-  Widget _buildSelectedStockInfoSection() {
-    final item = _selectedMarketItem;
-
-    if (item == null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: const Text(
-          '종목을 선택하면 기업 설명이 표시됩니다.',
-          style: TextStyle(
-            fontSize: 14,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    }
-
+  // 수정91차: 선택 종목 정보 / 뉴스 / 미체결 / 실시간 체결 통합 탭
+  Widget _buildStockInfoTabSection() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -1195,130 +1193,464 @@ class _StockScreenState extends State<StockScreen> {
         children: [
           Row(
             children: [
-              const Text(
-                '선택 종목 정보',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF111827),
-                ),
-              ),
-              const Spacer(),
-              _buildListingStatusBadge(item.listingStatus),
+              _buildInfoTabButton(keyName: 'info', label: '선택 종목 정보'),
+              const SizedBox(width: 8),
+              _buildInfoTabButton(keyName: 'news', label: '뉴스'),
+              const SizedBox(width: 8),
+              _buildInfoTabButton(keyName: 'pending', label: '미체결 내역'),
+              const SizedBox(width: 8),
+              _buildInfoTabButton(keyName: 'tick', label: '실시간 체결'),
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                item.name,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF111827),
-                ),
+          _buildInfoTabBody(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoTabButton({required String keyName, required String label}) {
+    final bool isSelected = _selectedInfoTab == keyName;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedInfoTab = keyName;
+        });
+      },
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF111827) : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF111827)
+                : const Color(0xFFE5E7EB),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            color: isSelected ? Colors.white : const Color(0xFF374151),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoTabBody() {
+    switch (_selectedInfoTab) {
+      case 'news':
+        return SizedBox(
+          height: _infoTabBodyHeight,
+          child: _buildMarketNewsTabBody(),
+        );
+
+      case 'pending':
+        return SizedBox(
+          height: _infoTabBodyHeight,
+          child: StockPendingOrderSection(
+            pendingOrders: _pendingOrderItems,
+            isLoggedIn: _isLoggedIn,
+            onCancelOrder: _cancelPendingOrder,
+          ),
+        );
+
+      case 'tick':
+        return SizedBox(
+          height: _infoTabBodyHeight,
+          child: StockTickLogSection(
+            tradeHistoryItems: _tradeHistoryItems,
+            onHoverChanged: _handleTickLogHoverChanged,
+          ),
+        );
+
+      case 'info':
+      default:
+        return SizedBox(
+          height: _infoTabBodyHeight,
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: _buildSelectedStockInfoTabBody(),
+          ),
+        );
+    }
+  }
+
+  Widget _buildSelectedStockInfoTabBody() {
+    final item = _selectedMarketItem;
+
+    if (item == null) {
+      return const Text(
+        '종목을 선택하면 기업 설명이 표시됩니다.',
+        style: TextStyle(
+          fontSize: 14,
+          color: Color(0xFF6B7280),
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              item.name,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF111827),
               ),
-              const SizedBox(width: 10),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  item.code,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              item.code,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+            const Spacer(),
+            _buildListingStatusBadge(item.listingStatus),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStockInfoCard(
+                label: '종목 분류',
+                value: _stockTypeLabel(item.stockType),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStockInfoCard(
+                label: '업종',
+                value: _sectorLabel(item.sector),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStockInfoCard(
+                label: '규모',
+                value: _marketCapLabel(item.marketCapLevel),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStockInfoCard(
+                label: '변동성',
+                value: _volatilityLabel(item.volatilityLevel),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Text(
+            item.description,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.65,
+              color: Color(0xFF374151),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStockMetricCard(
+                label: '성장성',
+                value: '${item.growthScore}점',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStockMetricCard(
+                label: '안정성',
+                value: '${item.stabilityScore}점',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStockMetricCard(
+                label: '뉴스 민감도',
+                value: '× ${item.newsSensitivity.toStringAsFixed(2)}',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStockMetricCard(
+                label: '상폐 위험도',
+                value: '${item.delistingRiskScore}점',
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMarketNewsTabBody() {
+    if (_recentNewsItems.isEmpty) {
+      return const Center(
+        child: Text(
+          '표시할 시장 뉴스가 없습니다.',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF6B7280),
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      physics: const ClampingScrollPhysics(),
+      itemCount: _recentNewsItems.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        return _buildMarketNewsItem(_recentNewsItems[index]);
+      },
+    );
+  }
+
+  Widget _buildMarketNewsItem(Map<String, dynamic> news) {
+    final String title = (news['title'] ?? '제목 없음').toString();
+
+    final String content = (news['content'] ?? news['body'] ?? '내용 없음')
+        .toString();
+
+    final String targetType = (news['target_type'] ?? '').toString();
+    final String targetValue = (news['target_value'] ?? '').toString();
+    final String sentiment = (news['sentiment'] ?? '').toString();
+    final String status = (news['status'] ?? '').toString();
+
+    final bool isApplied =
+        news['is_applied'] == true || news['is_price_applied'] == true;
+
+    final bool isRealWorldBased = news['is_real_world_based'] == true;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildNewsDirectionDot(sentiment),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildNewsBadge(
+                      isApplied ? '반영완료' : '대기',
+                      isApplied
+                          ? const Color(0xFFDCFCE7)
+                          : const Color(0xFFFEF3C7),
+                      isApplied
+                          ? const Color(0xFF15803D)
+                          : const Color(0xFFB45309),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildNewsBadge(
+                      isRealWorldBased ? '실제뉴스 기반' : '가상뉴스',
+                      isRealWorldBased
+                          ? const Color(0xFFDBEAFE)
+                          : const Color(0xFFF3F4F6),
+                      isRealWorldBased
+                          ? const Color(0xFF1D4ED8)
+                          : const Color(0xFF374151),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF6B7280),
+                    height: 1.45,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4B5563),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStockInfoCard(
-                  label: '종목 분류',
-                  value: _stockTypeLabel(item.stockType),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _buildNewsSmallInfo(
+                      '대상',
+                      _newsTargetLabel(targetType, targetValue),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildNewsSmallInfo(
+                      '영향',
+                      _sentimentLabel(sentiment),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildNewsSmallInfo(
+                      '상태',
+                      _newsStatusLabel(status),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildStockInfoCard(
-                  label: '업종',
-                  value: _sectorLabel(item.sector),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildStockInfoCard(
-                  label: '규모',
-                  value: _marketCapLabel(item.marketCapLevel),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildStockInfoCard(
-                  label: '변동성',
-                  value: _volatilityLabel(item.volatilityLevel),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
+              ],
             ),
-            child: Text(
-              item.description,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.65,
-                color: Color(0xFF374151),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStockMetricCard(
-                  label: '성장성',
-                  value: '${item.growthScore}점',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildStockMetricCard(
-                  label: '안정성',
-                  value: '${item.stabilityScore}점',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildStockMetricCard(
-                  label: '뉴스 민감도',
-                  value: '× ${item.newsSensitivity.toStringAsFixed(2)}',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildStockMetricCard(
-                  label: '상폐 위험도',
-                  value: '${item.delistingRiskScore}점',
-                ),
-              ),
-            ],
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildNewsDirectionDot(String sentiment) {
+    final Color color = sentiment == 'positive'
+        ? const Color(0xFFDC2626)
+        : sentiment == 'negative'
+        ? const Color(0xFF2563EB)
+        : const Color(0xFF6B7280);
+
+    return Container(
+      width: 9,
+      height: 9,
+      margin: const EdgeInsets.only(top: 5),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+
+  Widget _buildNewsBadge(String label, Color backgroundColor, Color textColor) {
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewsSmallInfo(String label, String value) {
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Text(
+        '$label: $value',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF374151),
+        ),
+      ),
+    );
+  }
+
+  String _newsTargetLabel(String targetType, String targetValue) {
+    if (targetType == 'sector') {
+      return _sectorLabel(targetValue);
+    }
+
+    if (targetType == 'company') {
+      return targetValue;
+    }
+
+    if (targetType == 'market') {
+      if (targetValue == 'domestic') return '국내시장';
+      if (targetValue == 'overseas') return '해외시장';
+      return targetValue;
+    }
+
+    if (targetType == 'global') {
+      return '전체시장';
+    }
+
+    return '미분류';
+  }
+
+  String _sentimentLabel(String value) {
+    switch (value) {
+      case 'positive':
+        return '호재';
+      case 'negative':
+        return '악재';
+      case 'neutral':
+        return '중립';
+      default:
+        return '미정';
+    }
+  }
+
+  String _newsStatusLabel(String value) {
+    switch (value) {
+      case 'draft':
+        return '작성중';
+      case 'scheduled':
+        return '예약';
+      case 'published':
+        return '공개';
+      case 'applied':
+        return '반영';
+      case 'expired':
+        return '만료';
+      default:
+        return '미정';
+    }
   }
 
   Widget _buildStockInfoCard({required String label, required String value}) {
