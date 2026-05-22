@@ -74,6 +74,9 @@ class _StockScreenState extends State<StockScreen> {
   // 수정90차: 최근 시장 뉴스
   List<Map<String, dynamic>> _recentNewsItems = [];
 
+  // 수정98차: 주식시장 상태
+  Map<String, dynamic>? _stockMarketStatus;
+
   StockItemViewModel? _selectedMarketItem;
   double? _selectedOrderPrice;
   double? _manualOrderPrice;
@@ -98,11 +101,24 @@ class _StockScreenState extends State<StockScreen> {
 
   bool get _isLoggedIn => _session != null && _user != null;
 
+  // 수정99차: 현재 주식시장 장중 여부
+  bool get _isStockMarketOpen {
+    return _stockMarketStatus?['is_open'] == true;
+  }
+
   static const double _pageMaxWidth = 1480;
   static const double _gap = 14;
 
 // 수정92차: 정보 통합 탭 본문 고정 높이
   static const double _infoTabBodyHeight = 280;
+
+// 수정96차: 뉴스 영향률 개발 표시 여부
+// 개발 중 true, 실사용 전 false로 변경
+  static const bool _showDebugNewsImpact = true;
+
+// 수정97차: 주식 장 시간 개발 테스트용 강제 개장 여부
+// 개발 중 true, 실사용 전 false로 변경
+  static const bool _forceStockMarketOpenForDev = true;
 
   void _handleTickLogHoverChanged(bool isHovered) {
     if (!_pageScrollController.hasClients) return;
@@ -194,6 +210,7 @@ class _StockScreenState extends State<StockScreen> {
     await _loadTradeHistory();
     await _loadPendingOrders();
     await _loadRecentNewsItems();
+    await _loadStockMarketStatus();
 
     if (!mounted) return;
 
@@ -202,16 +219,30 @@ class _StockScreenState extends State<StockScreen> {
     });
   }
 
-  // 수정89차: 뉴스가 있으면 뉴스 반영, 없으면 기존 가상 거래량 가격 갱신
+  // 수정97차: 장중에만 뉴스/가격 갱신, 장 마감 후 주식 가격 변동 방지
   Future<void> _applyNewsOrSimulatePriceUpdate() async {
-    final newsResult = await _stockRepository.applyNextStockNewsEvent();
+    final newsResult = await _stockRepository.applyActiveStockNewsEvents(
+      forceOpen: _forceStockMarketOpenForDev,
+    );
 
     final bool success = newsResult['success'] == true;
-    final int appliedCount = ((newsResult['applied_count'] ?? 0) as num)
-        .toInt();
+    final bool marketOpen = newsResult['market_open'] == true;
 
-    if (success && appliedCount > 0) {
-      debugPrint('뉴스 주가 반영 완료: ${newsResult['title']} / 적용 종목 $appliedCount개');
+    final int appliedNewsCount =
+    ((newsResult['applied_news_count'] ?? 0) as num).toInt();
+
+    final int appliedStockCount =
+    ((newsResult['applied_stock_count'] ?? 0) as num).toInt();
+
+    if (!marketOpen) {
+      debugPrint('주식 장 마감 상태: 가격 갱신 중단');
+      return;
+    }
+
+    if (success && appliedNewsCount > 0 && appliedStockCount > 0) {
+      debugPrint(
+        '활성 뉴스 반복 반영 완료: 뉴스 $appliedNewsCount건 / 종목 $appliedStockCount개',
+      );
       return;
     }
 
@@ -246,6 +277,7 @@ class _StockScreenState extends State<StockScreen> {
 
         await _loadMarketItems();
         await _loadRecentNewsItems();
+        await _loadStockMarketStatus();
 
         // 수정87차: 가격 변동 후 새로 주문가와 일치한 미체결 주문 재확인
         await _stockTradeRepository.processPendingOrders();
@@ -469,6 +501,23 @@ class _StockScreenState extends State<StockScreen> {
       });
     } catch (e) {
       debugPrint('최근 시장 뉴스 조회 실패: $e');
+    }
+  }
+
+  // 수정98차: 주식시장 상태 조회
+  Future<void> _loadStockMarketStatus() async {
+    try {
+      final status = await _stockRepository.fetchStockMarketStatus(
+        forceOpen: _forceStockMarketOpenForDev,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _stockMarketStatus = status;
+      });
+    } catch (e) {
+      debugPrint('주식시장 상태 조회 실패: $e');
     }
   }
 
@@ -879,6 +928,12 @@ class _StockScreenState extends State<StockScreen> {
       return;
     }
 
+    // 수정99차: 휴장 중 시장가 매수 차단
+    if (!_isStockMarketOpen && _isMarketOrder) {
+      _showSnackBar('휴장 중에는 시장가 매수가 불가능합니다. 지정가 예약 주문만 가능합니다.');
+      return;
+    }
+
     _normalizeQuantity();
 
     final quantity = int.tryParse(_quantityController.text.trim()) ?? 0;
@@ -930,6 +985,12 @@ class _StockScreenState extends State<StockScreen> {
 
     if (_selectedMarketItem == null) {
       _showSnackBar('매도할 종목을 선택해주세요.');
+      return;
+    }
+
+    // 수정99차: 휴장 중 시장가 매도 차단
+    if (!_isStockMarketOpen && _isMarketOrder) {
+      _showSnackBar('휴장 중에는 시장가 매도가 불가능합니다. 지정가 예약 주문만 가능합니다.');
       return;
     }
 
@@ -1015,7 +1076,14 @@ class _StockScreenState extends State<StockScreen> {
                         totalProfitRate: _totalProfitRate,
                         isWalletLoading: _isWalletLoading,
                       ),
+
                       const SizedBox(height: _gap),
+
+                      // 수정98차: 주식시장 상태 표시
+                      _buildStockMarketStatusSection(),
+
+                      const SizedBox(height: _gap),
+
                       StockHoldingSection(
                         holdingItems: _holdingItems,
                         marketItems: _marketItems,
@@ -1041,6 +1109,136 @@ class _StockScreenState extends State<StockScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // 수정98차: 주식시장 상태 카드
+  Widget _buildStockMarketStatusSection() {
+    final status = _stockMarketStatus;
+
+    if (status == null) {
+      return Container(
+        width: double.infinity,
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: const Text(
+          '주식시장 상태를 불러오는 중입니다.',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF64748B),
+          ),
+        ),
+      );
+    }
+
+    final bool isOpen = status['is_open'] == true;
+    final String statusLabel = (status['status_label'] ?? '상태미정').toString();
+    final String nextStatus = (status['next_status'] ?? '-').toString();
+    final int remainingMinutes =
+    ((status['remaining_minutes'] ?? 0) as num).toInt();
+
+    final Color backgroundColor =
+    isOpen ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED);
+
+    final Color borderColor =
+    isOpen ? const Color(0xFFBBF7D0) : const Color(0xFFFED7AA);
+
+    final Color pointColor =
+    isOpen ? const Color(0xFF16A34A) : const Color(0xFFF97316);
+
+    final String description = isOpen
+        ? '가격 변동 · 뉴스 반영 · 주문 체결 진행'
+        : '가격 변동 정지 · 예약 주문 중심 운영';
+
+    return Container(
+      width: double.infinity,
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: pointColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '주식시장 $statusLabel',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: pointColor,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Container(
+            height: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: borderColor),
+            ),
+            child: Text(
+              '다음 $nextStatus까지 ${remainingMinutes}분',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF374151),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            height: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: borderColor),
+            ),
+            child: const Text(
+              '90분 장중 / 30분 휴장',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF374151),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              description,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1149,6 +1347,24 @@ class _StockScreenState extends State<StockScreen> {
                   });
                 },
                 onChangeOrderMode: (isMarket) {
+                  // 수정100차: 휴장 중 시장가 모드 선택 차단
+                  if (isMarket && !_isStockMarketOpen) {
+                    _showSnackBar('휴장 중에는 시장가 주문을 사용할 수 없습니다. 지정가 예약 주문만 가능합니다.');
+
+                    setState(() {
+                      _isMarketOrder = false;
+
+                      if (_selectedMarketItem != null) {
+                        _manualOrderPrice = _selectedMarketItem!.currentPrice;
+                        _selectedOrderPrice = _selectedMarketItem!.currentPrice;
+                        _priceController.text = _selectedMarketItem!.currentPrice
+                            .toStringAsFixed(0);
+                      }
+                    });
+
+                    return;
+                  }
+
                   setState(() {
                     _isMarketOrder = isMarket;
 
@@ -1199,7 +1415,7 @@ class _StockScreenState extends State<StockScreen> {
               const SizedBox(width: 8),
               _buildInfoTabButton(keyName: 'pending', label: '미체결 내역'),
               const SizedBox(width: 8),
-              _buildInfoTabButton(keyName: 'tick', label: '실시간 체결'),
+              _buildInfoTabButton(keyName: 'tick', label: '체결내역'),
             ],
           ),
           const SizedBox(height: 16),
@@ -1443,20 +1659,21 @@ class _StockScreenState extends State<StockScreen> {
     final String targetType = (news['target_type'] ?? '').toString();
     final String targetValue = (news['target_value'] ?? '').toString();
     final String sentiment = (news['sentiment'] ?? '').toString();
-    final String status = (news['status'] ?? '').toString();
-
-    final bool isApplied =
-        news['is_applied'] == true || news['is_price_applied'] == true;
 
     final bool isRealWorldBased = news['is_real_world_based'] == true;
+
+    final String newsStatusLabel = _newsActiveStatusLabel(news);
+    final bool isActive = newsStatusLabel == '영향중';
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: isActive ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: isActive ? const Color(0xFFBBF7D0) : const Color(0xFFE5E7EB),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1483,13 +1700,13 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                     const SizedBox(width: 8),
                     _buildNewsBadge(
-                      isApplied ? '반영완료' : '대기',
-                      isApplied
+                      newsStatusLabel,
+                      isActive
                           ? const Color(0xFFDCFCE7)
-                          : const Color(0xFFFEF3C7),
-                      isApplied
+                          : const Color(0xFFF3F4F6),
+                      isActive
                           ? const Color(0xFF15803D)
-                          : const Color(0xFFB45309),
+                          : const Color(0xFF374151),
                     ),
                     const SizedBox(width: 6),
                     _buildNewsBadge(
@@ -1530,8 +1747,15 @@ class _StockScreenState extends State<StockScreen> {
                     const SizedBox(width: 6),
                     _buildNewsSmallInfo(
                       '상태',
-                      _newsStatusLabel(status),
+                      newsStatusLabel,
                     ),
+                    if (_showDebugNewsImpact) ...[
+                      const SizedBox(width: 6),
+                      _buildNewsSmallInfo(
+                        '잔여',
+                        _newsRemainingLabel(news),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -1634,6 +1858,68 @@ class _StockScreenState extends State<StockScreen> {
       default:
         return '미정';
     }
+  }
+
+  // 수정95차: 뉴스 지속 반영 상태 표시
+  String _newsActiveStatusLabel(Map<String, dynamic> news) {
+    final String status = (news['status'] ?? '').toString();
+
+    final DateTime now = DateTime.now();
+
+    final DateTime? activeFrom = news['active_from'] == null
+        ? null
+        : DateTime.tryParse(news['active_from'].toString())?.toLocal();
+
+    final DateTime? activeUntil = news['active_until'] == null
+        ? null
+        : DateTime.tryParse(news['active_until'].toString())?.toLocal();
+
+    final double remainingImpactRate =
+    ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
+
+    if (remainingImpactRate.abs() <= 0.001) {
+      return '반영완료';
+    }
+
+    if (status == 'expired') {
+      return '만료';
+    }
+
+    if (activeFrom != null && now.isBefore(activeFrom)) {
+      return '대기';
+    }
+
+    if (activeUntil != null && now.isAfter(activeUntil)) {
+      return '만료';
+    }
+
+    if (activeFrom != null &&
+        activeUntil != null &&
+        now.isAfter(activeFrom) &&
+        now.isBefore(activeUntil)) {
+      return '영향중';
+    }
+
+    if (status == 'published') {
+      return '공개';
+    }
+
+    if (status == 'applied') {
+      return '반영';
+    }
+
+    return _newsStatusLabel(status);
+  }
+
+  String _newsRemainingLabel(Map<String, dynamic> news) {
+    final double remainingImpactRate =
+    ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
+
+    if (remainingImpactRate.abs() <= 0.001) {
+      return '0.00%';
+    }
+
+    return '${remainingImpactRate.toStringAsFixed(2)}%';
   }
 
   String _newsStatusLabel(String value) {

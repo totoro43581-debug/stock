@@ -41,22 +41,56 @@ class StockRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // 수정89차: 미적용 뉴스 1건을 주가에 반영
-  Future<Map<String, dynamic>> applyNextStockNewsEvent() async {
-    final response = await _client.rpc('apply_next_stock_news_event');
+  // 수정94차: 활성 뉴스 반복 반영
+  Future<Map<String, dynamic>> applyActiveStockNewsEvents({
+    bool forceOpen = true,
+  }) async {
+    final response = await _client.rpc(
+      'apply_active_stock_news_events',
+      params: {
+        'p_force_open': forceOpen,
+      },
+    );
 
     if (response == null) {
       return {
         'success': false,
-        'message': '뉴스 반영 결과가 없습니다.',
-        'applied_count': 0,
+        'message': '활성 뉴스 반영 결과가 없습니다.',
+        'market_open': false,
+        'applied_news_count': 0,
+        'applied_stock_count': 0,
       };
     }
 
     return Map<String, dynamic>.from(response as Map);
   }
 
-  // 수정90차: 최근 시장 뉴스 조회
+  // 수정98차: 게임형 주식시장 상태 조회
+  Future<Map<String, dynamic>> fetchStockMarketStatus({
+    bool forceOpen = false,
+  }) async {
+    final response = await _client.rpc(
+      'get_stock_market_status',
+      params: {
+        'p_force_open': forceOpen,
+      },
+    );
+
+    if (response == null) {
+      return {
+        'success': false,
+        'is_open': false,
+        'status_label': '상태미정',
+        'remaining_minutes': 0,
+        'next_status': '-',
+        'description': '주식시장 상태를 불러오지 못했습니다.',
+      };
+    }
+
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  // 수정95차: 최근 시장 뉴스 조회 - 지속 반영 상태 컬럼 포함
   Future<List<Map<String, dynamic>>> fetchRecentStockNewsEvents() async {
     final response = await _client
         .from('stock_news_events')
@@ -83,12 +117,22 @@ class StockRepository {
           is_price_applied,
           is_visible,
           is_real_world_based,
+          market_type,
+          active_from,
+          active_until,
+          last_applied_at,
+          total_impact_rate,
+          remaining_impact_rate,
+          apply_interval_minutes,
+          applied_count,
+          max_apply_count,
           created_at,
           applied_at,
           published_at
           ''',
     )
         .eq('is_visible', true)
+        .eq('market_type', 'stock')
         .order('created_at', ascending: false)
         .limit(8);
 

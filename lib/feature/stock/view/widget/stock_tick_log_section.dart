@@ -61,8 +61,8 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
   Widget build(BuildContext context) {
     final visibleLogs = [...widget.tradeHistoryItems]
       ..sort((a, b) {
-        final aTime = a.createdAt ?? DateTime.now();
-        final bTime = b.createdAt ?? DateTime.now();
+        final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
 
         return bTime.compareTo(aTime);
       });
@@ -95,43 +95,26 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
             },
           );
         },
-        child: Container(
-          height: 240,
-          padding: const EdgeInsets.all(14),
-          decoration: _cardDecoration(),
+        child: SizedBox(
+          width: double.infinity,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '실시간 체결',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF111827),
-                ),
-              ),
+              _buildHeader(limitedLogs.length),
               const SizedBox(height: 10),
+              _buildTableHeader(),
+              const SizedBox(height: 8),
               Expanded(
-                child: visibleLogs.isEmpty
-                    ? const Center(
-                  child: Text(
-                    '체결 로그가 없습니다.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                )
+                child: limitedLogs.isEmpty
+                    ? _buildEmptyMessage()
                     : ListView.separated(
                   controller: _scrollController,
                   primary: false,
+                  padding: EdgeInsets.zero,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: limitedLogs.length,
                   separatorBuilder: (_, __) {
-                    return const Divider(
-                      height: 1,
-                      color: Color(0xFFF1F5F9),
-                    );
+                    return const SizedBox(height: 6);
                   },
                   itemBuilder: (context, index) {
                     return _buildLogRow(
@@ -148,6 +131,95 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
     );
   }
 
+  Widget _buildHeader(int count) {
+    return Row(
+      children: [
+        const Text(
+          '최근 체결내역',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF111827),
+          ),
+        ),
+        const Spacer(),
+        Text(
+          '최근 $count건',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF64748B),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableHeader() {
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 86,
+            child: Text(
+              '시간',
+              style: _headerTextStyle,
+            ),
+          ),
+          SizedBox(width: 12),
+          SizedBox(
+            width: 78,
+            child: Text(
+              '구분',
+              style: _headerTextStyle,
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            flex: 3,
+            child: Text(
+              '종목',
+              style: _headerTextStyle,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              '체결가',
+              textAlign: TextAlign.right,
+              style: _headerTextStyle,
+            ),
+          ),
+          SizedBox(width: 20),
+          SizedBox(
+            width: 70,
+            child: Text(
+              '수량',
+              textAlign: TextAlign.right,
+              style: _headerTextStyle,
+            ),
+          ),
+          SizedBox(width: 20),
+          SizedBox(
+            width: 120,
+            child: Text(
+              '체결금액',
+              textAlign: TextAlign.right,
+              style: _headerTextStyle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLogRow(
       StockTradeHistoryModel item,
       int index,
@@ -157,87 +229,125 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
     final Color color =
     isBuy ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
 
+    final String tradeTypeLabel = isBuy ? '매수체결' : '매도체결';
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: index == 0 && _flashVisible
-          ? BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(8),
-      )
-          : null,
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: index == 0 && _flashVisible
+            ? color.withOpacity(0.08)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
       child: Row(
         children: [
           SizedBox(
-            width: 58,
+            width: 86,
             child: Text(
-              _formatTime(item.createdAt ?? DateTime.now()),
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF94A3B8),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 62,
-            child: Text(
-              isBuy ? '매수체결' : '매도체결',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-                color: color,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              item.stockName,
+              _formatDateTime(item.createdAt),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF111827),
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF64748B),
               ),
             ),
           ),
+          const SizedBox(width: 12),
           SizedBox(
-            width: 88,
+            width: 78,
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  tradeTypeLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    item.stockName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  item.stockCode,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
             child: Text(
               '₩ ${_formatPrice(item.price)}',
               textAlign: TextAlign.right,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w900,
                 color: color,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 20),
           SizedBox(
-            width: 58,
+            width: 70,
             child: Text(
               '${_formatVolume(item.quantity)}주',
               textAlign: TextAlign.right,
               style: const TextStyle(
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF475569),
+                color: Color(0xFF334155),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 20),
           SizedBox(
-            width: 72,
+            width: 120,
             child: Text(
               '₩ ${_formatPrice(item.totalAmount)}',
               textAlign: TextAlign.right,
               style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF475569),
               ),
             ),
           ),
@@ -246,22 +356,39 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
     );
   }
 
-  String _formatTime(DateTime value) {
+  Widget _buildEmptyMessage() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: const Text(
+        '체결내역이 없습니다.',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF64748B),
+        ),
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
+
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     final second = value.second.toString().padLeft(2, '0');
 
-    return '$hour:$minute:$second';
-  }
-
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(
-        color: const Color(0xFFE5E7EB),
-      ),
-    );
+    return '$month-$day $hour:$minute:$second';
   }
 
   String _formatPrice(num value) {
@@ -277,4 +404,10 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
           (match) => ',',
     );
   }
+
+  static const TextStyle _headerTextStyle = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w900,
+    color: Color(0xFF64748B),
+  );
 }
