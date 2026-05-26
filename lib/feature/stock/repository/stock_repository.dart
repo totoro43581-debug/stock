@@ -10,8 +10,7 @@ class StockRepository {
   Future<List<Map<String, dynamic>>> fetchActiveStocks() async {
     final response = await _client
         .from('stock_item')
-        .select(
-      '''
+        .select('''
           id,
           code,
           name,
@@ -32,8 +31,7 @@ class StockRepository {
           news_sensitivity,
           delisting_risk_score,
           listing_status
-          ''',
-    )
+          ''')
         .eq('is_active', true)
         .order('market', ascending: true)
         .order('name', ascending: true);
@@ -41,28 +39,39 @@ class StockRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // 수정94차: 활성 뉴스 반복 반영
+  // 수정103차: 활성 뉴스 지속 반영 RPC 호출 결과 확인
   Future<Map<String, dynamic>> applyActiveStockNewsEvents({
-    bool forceOpen = true,
+    bool force = false,
   }) async {
+    print('수정103차 RPC 호출 시작 / force = $force');
+
     final response = await _client.rpc(
       'apply_active_stock_news_events',
-      params: {
-        'p_force_open': forceOpen,
-      },
+      params: {'p_force': force},
     );
 
+    print('수정103차 RPC 원본 응답 = $response');
+
     if (response == null) {
-      return {
+      final emptyResult = {
         'success': false,
         'message': '활성 뉴스 반영 결과가 없습니다.',
         'market_open': false,
-        'applied_news_count': 0,
-        'applied_stock_count': 0,
+        'force_applied': force,
+        'news_count': 0,
+        'stock_count': 0,
       };
+
+      print('수정103차 RPC 빈 응답 처리 = $emptyResult');
+
+      return emptyResult;
     }
 
-    return Map<String, dynamic>.from(response as Map);
+    final result = Map<String, dynamic>.from(response as Map);
+
+    print('수정103차 RPC 변환 결과 = $result');
+
+    return result;
   }
 
   // 수정98차: 게임형 주식시장 상태 조회
@@ -71,9 +80,7 @@ class StockRepository {
   }) async {
     final response = await _client.rpc(
       'get_stock_market_status',
-      params: {
-        'p_force_open': forceOpen,
-      },
+      params: {'p_force_open': forceOpen},
     );
 
     if (response == null) {
@@ -94,8 +101,7 @@ class StockRepository {
   Future<List<Map<String, dynamic>>> fetchRecentStockNewsEvents() async {
     final response = await _client
         .from('stock_news_events')
-        .select(
-      '''
+        .select('''
           id,
           news_code,
           title,
@@ -129,8 +135,7 @@ class StockRepository {
           created_at,
           applied_at,
           published_at
-          ''',
-    )
+          ''')
         .eq('is_visible', true)
         .eq('market_type', 'stock')
         .order('created_at', ascending: false)

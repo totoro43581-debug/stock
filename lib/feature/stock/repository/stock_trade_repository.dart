@@ -3,14 +3,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/stock/model/stock_holding_model.dart';
 import 'package:stock/feature/stock/model/stock_pending_order_model.dart';
 import 'package:stock/feature/stock/model/stock_trade_history_model.dart';
-import 'package:stock/feature/wallet/model/wallet_model.dart';
-import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 
 class StockTradeRepository {
   StockTradeRepository();
 
   final SupabaseClient _client = Supabase.instance.client;
-  final WalletRepository _walletRepository = WalletRepository();
 
   Future<List<StockHoldingModel>> fetchHoldings(String userId) async {
     final data = await _client
@@ -36,7 +33,7 @@ class StockTradeRepository {
     return (data as List)
         .map(
           (e) => StockTradeHistoryModel.fromMap(Map<String, dynamic>.from(e)),
-        )
+    )
         .toList();
   }
 
@@ -51,7 +48,7 @@ class StockTradeRepository {
     return (data as List)
         .map(
           (e) => StockPendingOrderModel.fromMap(Map<String, dynamic>.from(e)),
-        )
+    )
         .toList();
   }
 
@@ -175,12 +172,45 @@ class StockTradeRepository {
     await _client
         .from('stock_pending_orders')
         .update({
-          'status': 'cancelled',
-          'updated_at': DateTime.now().toIso8601String(),
-        })
+      'status': 'cancelled',
+      'updated_at': DateTime.now().toIso8601String(),
+    })
         .eq('id', orderId)
         .eq('user_id', userId)
         .eq('status', 'pending');
+  }
+
+  // 수정104차: 주식계좌 현금 조회
+  Future<int> _fetchStockAccountCash(String userId) async {
+    final response = await _client
+        .from('user_asset_accounts')
+        .select('cash_balance')
+        .eq('user_id', userId)
+        .eq('account_type', 'stock')
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (response == null) {
+      throw Exception('주식 투자 계좌를 찾을 수 없습니다.');
+    }
+
+    return ((response['cash_balance'] ?? 0) as num).round();
+  }
+
+  // 수정104차: 주식계좌 현금 변경
+  Future<void> _updateStockAccountCash({
+    required String userId,
+    required int cashBalance,
+  }) async {
+    await _client
+        .from('user_asset_accounts')
+        .update({
+      'cash_balance': cashBalance,
+      'updated_at': DateTime.now().toIso8601String(),
+    })
+        .eq('user_id', userId)
+        .eq('account_type', 'stock')
+        .eq('is_active', true);
   }
 
   // 수정1차: 매수 검증 로직 강화
@@ -210,16 +240,10 @@ class StockTradeRepository {
     final double rawAmount = price * quantity;
     final int totalAmount = rawAmount.round();
 
-    final WalletModel? latestWallet = await _walletRepository.fetchWallet(
-      userId,
-    );
+    final int latestStockCash = await _fetchStockAccountCash(userId);
 
-    if (latestWallet == null) {
-      throw Exception('지갑 정보를 찾을 수 없습니다.');
-    }
-
-    if (latestWallet.cashBalance < totalAmount) {
-      throw Exception('보유 현금이 부족합니다.');
+    if (latestStockCash < totalAmount) {
+      throw Exception('주식계좌 현금이 부족합니다.');
     }
 
     final existing = await _client
@@ -241,23 +265,26 @@ class StockTradeRepository {
       final int currentQuantity = (existing['quantity'] as num?)?.toInt() ?? 0;
 
       final double currentAveragePrice =
-          ((existing['average_price'] as num?) ?? 0).toDouble();
+      ((existing['average_price'] as num?) ?? 0).toDouble();
 
       final int newQuantity = currentQuantity + quantity;
 
       final double newAveragePrice =
           ((currentQuantity * currentAveragePrice) + (quantity * price)) /
-          newQuantity;
+              newQuantity;
 
       await _client
           .from('stock_holdings')
-          .update({'quantity': newQuantity, 'average_price': newAveragePrice})
+          .update({
+        'quantity': newQuantity,
+        'average_price': newAveragePrice,
+      })
           .eq('id', existing['id']);
     }
 
-    await _walletRepository.updateCashBalance(
+    await _updateStockAccountCash(
       userId: userId,
-      cashBalance: latestWallet.cashBalance - totalAmount,
+      cashBalance: latestStockCash - totalAmount,
     );
 
     // 수정41차: stock_item_id 포함해서 거래 저장
@@ -343,13 +370,7 @@ class StockTradeRepository {
     final double fee = rawAmount * 0.0015;
     final int totalAmount = (rawAmount - fee).round();
 
-    final WalletModel? latestWallet = await _walletRepository.fetchWallet(
-      userId,
-    );
-
-    if (latestWallet == null) {
-      throw Exception('지갑 정보를 찾을 수 없습니다.');
-    }
+    final int latestStockCash = await _fetchStockAccountCash(userId);
 
     final int remainQuantity = currentQuantity - quantity;
 
@@ -362,9 +383,9 @@ class StockTradeRepository {
           .eq('id', existing['id']);
     }
 
-    await _walletRepository.updateCashBalance(
+    await _updateStockAccountCash(
       userId: userId,
-      cashBalance: latestWallet.cashBalance + totalAmount,
+      cashBalance: latestStockCash + totalAmount,
     );
 
     final stockItem = await _client
@@ -385,8 +406,9 @@ class StockTradeRepository {
       'trade_type': 'sell',
       'quantity': quantity,
       'price': price,
-      'total_amount': price * quantity,
+      'total_amount': totalAmount,
     });
+
     // 수정57차: 매도 체결 후 현재가/거래대금 반영
     await _client.rpc(
       'apply_stock_trade',

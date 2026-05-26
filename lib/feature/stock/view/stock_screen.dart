@@ -25,6 +25,7 @@ import 'package:stock/feature/wallet/model/wallet_model.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
 
@@ -109,15 +110,15 @@ class _StockScreenState extends State<StockScreen> {
   static const double _pageMaxWidth = 1480;
   static const double _gap = 14;
 
-// 수정92차: 정보 통합 탭 본문 고정 높이
+  // 수정92차: 정보 통합 탭 본문 고정 높이
   static const double _infoTabBodyHeight = 280;
 
-// 수정96차: 뉴스 영향률 개발 표시 여부
-// 개발 중 true, 실사용 전 false로 변경
+  // 수정96차: 뉴스 영향률 개발 표시 여부
+  // 개발 중 true, 실사용 전 false로 변경
   static const bool _showDebugNewsImpact = true;
 
-// 수정97차: 주식 장 시간 개발 테스트용 강제 개장 여부
-// 개발 중 true, 실사용 전 false로 변경
+  // 수정97차: 주식 장 시간 개발 테스트용 강제 개장 여부
+  // 개발 중 true, 실사용 전 false로 변경
   static const bool _forceStockMarketOpenForDev = true;
 
   void _handleTickLogHoverChanged(bool isHovered) {
@@ -219,29 +220,29 @@ class _StockScreenState extends State<StockScreen> {
     });
   }
 
-  // 수정97차: 장중에만 뉴스/가격 갱신, 장 마감 후 주식 가격 변동 방지
+  // 수정102차: 실제 장중 또는 개발 강제 개장일 때만 주식 가격 갱신
   Future<void> _applyNewsOrSimulatePriceUpdate() async {
     final newsResult = await _stockRepository.applyActiveStockNewsEvents(
-      forceOpen: _forceStockMarketOpenForDev,
+      force: _forceStockMarketOpenForDev,
     );
 
     final bool success = newsResult['success'] == true;
     final bool marketOpen = newsResult['market_open'] == true;
+    final bool forceApplied = newsResult['force_applied'] == true;
 
-    final int appliedNewsCount =
-    ((newsResult['applied_news_count'] ?? 0) as num).toInt();
+    final bool canUpdatePrice = marketOpen || forceApplied;
 
-    final int appliedStockCount =
-    ((newsResult['applied_stock_count'] ?? 0) as num).toInt();
+    final int newsCount = ((newsResult['news_count'] ?? 0) as num).toInt();
+    final int stockCount = ((newsResult['stock_count'] ?? 0) as num).toInt();
 
-    if (!marketOpen) {
-      debugPrint('주식 장 마감 상태: 가격 갱신 중단');
+    if (!canUpdatePrice) {
+      debugPrint('주식 장 마감 상태: 가격 갱신 중지');
       return;
     }
 
-    if (success && appliedNewsCount > 0 && appliedStockCount > 0) {
+    if (success && newsCount > 0 && stockCount > 0) {
       debugPrint(
-        '활성 뉴스 반복 반영 완료: 뉴스 $appliedNewsCount건 / 종목 $appliedStockCount개',
+        '활성 뉴스 반복 반영 완료: 뉴스 $newsCount건 / 종목 $stockCount개',
       );
       return;
     }
@@ -1142,17 +1143,20 @@ class _StockScreenState extends State<StockScreen> {
     final bool isOpen = status['is_open'] == true;
     final String statusLabel = (status['status_label'] ?? '상태미정').toString();
     final String nextStatus = (status['next_status'] ?? '-').toString();
-    final int remainingMinutes =
-    ((status['remaining_minutes'] ?? 0) as num).toInt();
+    final int remainingMinutes = ((status['remaining_minutes'] ?? 0) as num)
+        .toInt();
 
-    final Color backgroundColor =
-    isOpen ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED);
+    final Color backgroundColor = isOpen
+        ? const Color(0xFFF0FDF4)
+        : const Color(0xFFFFF7ED);
 
-    final Color borderColor =
-    isOpen ? const Color(0xFFBBF7D0) : const Color(0xFFFED7AA);
+    final Color borderColor = isOpen
+        ? const Color(0xFFBBF7D0)
+        : const Color(0xFFFED7AA);
 
-    final Color pointColor =
-    isOpen ? const Color(0xFF16A34A) : const Color(0xFFF97316);
+    final Color pointColor = isOpen
+        ? const Color(0xFF16A34A)
+        : const Color(0xFFF97316);
 
     final String description = isOpen
         ? '가격 변동 · 뉴스 반영 · 주문 체결 진행'
@@ -1349,7 +1353,9 @@ class _StockScreenState extends State<StockScreen> {
                 onChangeOrderMode: (isMarket) {
                   // 수정100차: 휴장 중 시장가 모드 선택 차단
                   if (isMarket && !_isStockMarketOpen) {
-                    _showSnackBar('휴장 중에는 시장가 주문을 사용할 수 없습니다. 지정가 예약 주문만 가능합니다.');
+                    _showSnackBar(
+                      '휴장 중에는 시장가 주문을 사용할 수 없습니다. 지정가 예약 주문만 가능합니다.',
+                    );
 
                     setState(() {
                       _isMarketOrder = false;
@@ -1357,7 +1363,8 @@ class _StockScreenState extends State<StockScreen> {
                       if (_selectedMarketItem != null) {
                         _manualOrderPrice = _selectedMarketItem!.currentPrice;
                         _selectedOrderPrice = _selectedMarketItem!.currentPrice;
-                        _priceController.text = _selectedMarketItem!.currentPrice
+                        _priceController.text = _selectedMarketItem!
+                            .currentPrice
                             .toStringAsFixed(0);
                       }
                     });
@@ -1740,21 +1747,12 @@ class _StockScreenState extends State<StockScreen> {
                       _newsTargetLabel(targetType, targetValue),
                     ),
                     const SizedBox(width: 6),
-                    _buildNewsSmallInfo(
-                      '영향',
-                      _sentimentLabel(sentiment),
-                    ),
+                    _buildNewsSmallInfo('영향', _sentimentLabel(sentiment)),
                     const SizedBox(width: 6),
-                    _buildNewsSmallInfo(
-                      '상태',
-                      newsStatusLabel,
-                    ),
+                    _buildNewsSmallInfo('상태', newsStatusLabel),
                     if (_showDebugNewsImpact) ...[
                       const SizedBox(width: 6),
-                      _buildNewsSmallInfo(
-                        '잔여',
-                        _newsRemainingLabel(news),
-                      ),
+                      _buildNewsSmallInfo('잔여', _newsRemainingLabel(news)),
                     ],
                   ],
                 ),
@@ -1875,7 +1873,7 @@ class _StockScreenState extends State<StockScreen> {
         : DateTime.tryParse(news['active_until'].toString())?.toLocal();
 
     final double remainingImpactRate =
-    ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
+        ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
 
     if (remainingImpactRate.abs() <= 0.001) {
       return '반영완료';
@@ -1913,7 +1911,7 @@ class _StockScreenState extends State<StockScreen> {
 
   String _newsRemainingLabel(Map<String, dynamic> news) {
     final double remainingImpactRate =
-    ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
+        ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
 
     if (remainingImpactRate.abs() <= 0.001) {
       return '0.00%';
