@@ -2,6 +2,10 @@ class BankProductModel {
   final String id;
   final String productCode;
   final String productName;
+
+  // 수정4차: 상품이 속한 은행명 표시용
+  final String bankName;
+
   final String productType;
   final String? description;
   final double annualRate;
@@ -16,6 +20,7 @@ class BankProductModel {
     required this.id,
     required this.productCode,
     required this.productName,
+    required this.bankName,
     required this.productType,
     required this.description,
     required this.annualRate,
@@ -36,6 +41,7 @@ class BankProductModel {
       id: map['id']?.toString() ?? '',
       productCode: map['product_code']?.toString() ?? '',
       productName: map['product_name']?.toString() ?? '',
+      bankName: map['bank_name']?.toString() ?? '',
       productType: map['product_type']?.toString() ?? '',
       description: map['description']?.toString(),
       annualRate: _toDouble(map['annual_rate']),

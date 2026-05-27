@@ -5,7 +5,16 @@ import 'package:stock/feature/bank/model/user_bank_account_model.dart';
 class BankRepository {
   final SupabaseClient _client = Supabase.instance.client;
 
-  // 수정2차: 활성 예금/적금 상품 전체 조회
+  Map<String, dynamic> _withBankName(Map<String, dynamic> row) {
+    final bank = row['bank'];
+
+    return {
+      ...row,
+      'bank_name': bank is Map ? bank['bank_name']?.toString() ?? '' : '',
+    };
+  }
+
+  // 수정4차: 활성 예금/적금 상품 전체 조회 + 은행명 포함
   Future<List<BankProductModel>> fetchActiveBankProducts() async {
     final response = await _client
         .from('bank_products')
@@ -22,7 +31,10 @@ class BankRepository {
           max_amount,
           installment_count,
           installment_interval_days,
-          is_active
+          is_active,
+          bank:banks!bank_products_bank_id_fkey(
+            bank_name
+          )
           ''',
     )
         .eq('is_active', true)
@@ -32,11 +44,11 @@ class BankRepository {
     final rows = List<Map<String, dynamic>>.from(response);
 
     return rows
-        .map((row) => BankProductModel.fromMap(row))
+        .map((row) => BankProductModel.fromMap(_withBankName(row)))
         .toList();
   }
 
-  // 수정2차: 예금 상품만 조회
+  // 수정4차: 예금 상품만 조회 + 은행명 포함
   Future<List<BankProductModel>> fetchDepositProducts() async {
     final response = await _client
         .from('bank_products')
@@ -53,7 +65,10 @@ class BankRepository {
           max_amount,
           installment_count,
           installment_interval_days,
-          is_active
+          is_active,
+          bank:banks!bank_products_bank_id_fkey(
+            bank_name
+          )
           ''',
     )
         .eq('is_active', true)
@@ -63,11 +78,11 @@ class BankRepository {
     final rows = List<Map<String, dynamic>>.from(response);
 
     return rows
-        .map((row) => BankProductModel.fromMap(row))
+        .map((row) => BankProductModel.fromMap(_withBankName(row)))
         .toList();
   }
 
-  // 수정2차: 적금 상품만 조회
+  // 수정4차: 적금 상품만 조회 + 은행명 포함
   Future<List<BankProductModel>> fetchSavingsProducts() async {
     final response = await _client
         .from('bank_products')
@@ -84,7 +99,10 @@ class BankRepository {
           max_amount,
           installment_count,
           installment_interval_days,
-          is_active
+          is_active,
+          bank:banks!bank_products_bank_id_fkey(
+            bank_name
+          )
           ''',
     )
         .eq('is_active', true)
@@ -94,7 +112,7 @@ class BankRepository {
     final rows = List<Map<String, dynamic>>.from(response);
 
     return rows
-        .map((row) => BankProductModel.fromMap(row))
+        .map((row) => BankProductModel.fromMap(_withBankName(row)))
         .toList();
   }
 
@@ -135,9 +153,7 @@ class BankRepository {
 
     final rows = List<Map<String, dynamic>>.from(response);
 
-    return rows
-        .map((row) => UserBankAccountModel.fromMap(row))
-        .toList();
+    return rows.map((row) => UserBankAccountModel.fromMap(row)).toList();
   }
 
   // 수정2차: 로그인 유저의 활성 예금/적금 계좌 조회
@@ -178,9 +194,7 @@ class BankRepository {
 
     final rows = List<Map<String, dynamic>>.from(response);
 
-    return rows
-        .map((row) => UserBankAccountModel.fromMap(row))
-        .toList();
+    return rows.map((row) => UserBankAccountModel.fromMap(row)).toList();
   }
 
   // 수정2차: 예금 가입 RPC 호출
