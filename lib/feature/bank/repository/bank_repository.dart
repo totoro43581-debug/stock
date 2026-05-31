@@ -14,7 +14,7 @@ class BankRepository {
     };
   }
 
-  // 수정4차: 활성 예금/적금 상품 전체 조회 + 은행명 포함
+  // 수정22차: 활성 예금/적금 상품 전체 조회 + 중도해지 인정률 포함
   Future<List<BankProductModel>> fetchActiveBankProducts() async {
     final response = await _client
         .from('bank_products')
@@ -31,6 +31,7 @@ class BankRepository {
           max_amount,
           installment_count,
           installment_interval_days,
+          early_cancel_rate,
           is_active,
           bank:banks!bank_products_bank_id_fkey(
             bank_name
@@ -48,7 +49,7 @@ class BankRepository {
         .toList();
   }
 
-  // 수정4차: 예금 상품만 조회 + 은행명 포함
+  // 수정22차: 예금 상품만 조회 + 중도해지 인정률 포함
   Future<List<BankProductModel>> fetchDepositProducts() async {
     final response = await _client
         .from('bank_products')
@@ -65,6 +66,7 @@ class BankRepository {
           max_amount,
           installment_count,
           installment_interval_days,
+          early_cancel_rate,
           is_active,
           bank:banks!bank_products_bank_id_fkey(
             bank_name
@@ -82,7 +84,7 @@ class BankRepository {
         .toList();
   }
 
-  // 수정4차: 적금 상품만 조회 + 은행명 포함
+  // 수정22차: 적금 상품만 조회 + 중도해지 인정률 포함
   Future<List<BankProductModel>> fetchSavingsProducts() async {
     final response = await _client
         .from('bank_products')
@@ -99,6 +101,7 @@ class BankRepository {
           max_amount,
           installment_count,
           installment_interval_days,
+          early_cancel_rate,
           is_active,
           bank:banks!bank_products_bank_id_fkey(
             bank_name
@@ -223,6 +226,48 @@ class BankRepository {
       params: {
         'p_product_id': productId,
         'p_installment_amount': installmentAmount,
+      },
+    );
+
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  // 수정8차: 적금 회차 납입 RPC 호출
+  Future<Map<String, dynamic>> paySavingsInstallment({
+    required String accountId,
+  }) async {
+    final response = await _client.rpc(
+      'pay_bank_savings_installment',
+      params: {
+        'p_account_id': accountId,
+      },
+    );
+
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  // 수정9차: 예금/적금 만기 수령 RPC 호출
+  Future<Map<String, dynamic>> claimBankProductAccount({
+    required String accountId,
+  }) async {
+    final response = await _client.rpc(
+      'claim_bank_product_account',
+      params: {
+        'p_account_id': accountId,
+      },
+    );
+
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  // 수정10차: 예금/적금 중도해지 RPC 호출
+  Future<Map<String, dynamic>> cancelBankProductAccount({
+    required String accountId,
+  }) async {
+    final response = await _client.rpc(
+      'cancel_bank_product_account',
+      params: {
+        'p_account_id': accountId,
       },
     );
 

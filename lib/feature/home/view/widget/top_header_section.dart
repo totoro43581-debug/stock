@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:stock/feature/bank/view/bank_screen.dart';
-
 
 class TopHeaderSection extends StatelessWidget {
   final Session? session;
 
-  // 수정1차: 현재 선택 메뉴
+  // 수정18차: 현재 선택 메뉴
   final String selectedMenu;
 
-  // 수정1차: 메뉴 클릭 콜백
+  // 수정18차: 메뉴 클릭 콜백
   final ValueChanged<String> onMenuSelected;
 
   const TopHeaderSection({
@@ -21,10 +19,8 @@ class TopHeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 수정2차: 현재 로그인 사용자 정보 읽기
     final User? user = Supabase.instance.client.auth.currentUser;
 
-    // 수정2차: userMetadata 기반 사용자명 표시
     final String displayName =
         user?.userMetadata?['user_name']?.toString() ?? '사용자';
 
@@ -97,16 +93,19 @@ class TopHeaderSection extends StatelessWidget {
               onTap: onMenuSelected,
             ),
             const SizedBox(width: 28),
+
+            // 수정18차: 예금/적금을 상위 메뉴에서 제거하고 계좌로 통합
+            // 라우팅은 기존 BankScreen 연결 유지를 위해 saving key 임시 유지
             _HeaderMenuButton(
-              text: '주식',
-              menuKey: 'stock',
+              text: '계좌',
+              menuKey: 'saving',
               selectedMenu: selectedMenu,
               onTap: onMenuSelected,
             ),
             const SizedBox(width: 28),
             _HeaderMenuButton(
-              text: '예금/적금',
-              menuKey: 'saving',
+              text: '주식',
+              menuKey: 'stock',
               selectedMenu: selectedMenu,
               onTap: onMenuSelected,
             ),

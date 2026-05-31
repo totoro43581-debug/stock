@@ -17,6 +17,9 @@ import 'widget/my_asset_card_section.dart';
 import '../../auth/view/widget/register_view_section.dart';
 import 'widget/top_header_section.dart';
 
+import 'package:stock/feature/wallet/repository/wallet_repository.dart';
+import 'package:stock/feature/point/repository/point_repository.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -218,7 +221,10 @@ class _HomeScreenState extends State<HomeScreen> {
       // 수정8차: 로그인 직후 wallet 자동 생성 보장
       await WalletRepository().ensureWallet(user.id);
 
-      // 수정1차: 로그인 직후 기본 자산계좌 3개 자동 생성 보장
+// 수정9차: 로그인 직후 최초 포인트 지급 보장
+      await PointRepository().ensureUserPoints();
+
+// 수정1차: 로그인 직후 기본 자산계좌 3개 자동 생성 보장
       await _assetAccountRepository.ensureUserAssetAccounts();
 
       if (!mounted) return;
@@ -329,6 +335,9 @@ class _HomeScreenState extends State<HomeScreen> {
         'agree_privacy': true,
         'agree_marketing': false,
       });
+
+      // 수정9차: 회원가입 직후 최초 포인트 지급 보장
+      await PointRepository().ensureUserPoints();
 
       if (!mounted) return;
 
@@ -490,7 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 if (isWide)
                   SizedBox(
-                    height: 342,
+                    height: 380,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
