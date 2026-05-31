@@ -14,6 +14,10 @@ class BankProductModel {
   final double? maxAmount;
   final int? installmentCount;
   final int? installmentIntervalDays;
+
+  // 수정21차: 중도해지 이자 인정률
+  final double earlyCancelRate;
+
   final bool isActive;
 
   const BankProductModel({
@@ -29,6 +33,7 @@ class BankProductModel {
     required this.maxAmount,
     required this.installmentCount,
     required this.installmentIntervalDays,
+    required this.earlyCancelRate,
     required this.isActive,
   });
 
@@ -56,6 +61,10 @@ class BankProductModel {
       installmentIntervalDays: map['installment_interval_days'] == null
           ? null
           : _toInt(map['installment_interval_days']),
+
+      // 수정21차: DB early_cancel_rate 읽기
+      earlyCancelRate: _toDouble(map['early_cancel_rate']),
+
       isActive: map['is_active'] == true,
     );
   }

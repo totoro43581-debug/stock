@@ -2,19 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/asset_account/repository/asset_account_repository.dart';
 import 'package:stock/feature/bank/view/bank_screen.dart';
+import 'package:stock/feature/point/repository/point_repository.dart';
 import 'package:stock/feature/stock/view/stock_screen.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 
-import 'package:stock/feature/asset_account/repository/asset_account_repository.dart';
-
+import '../../auth/view/widget/login_card_section.dart';
+import '../../auth/view/widget/register_view_section.dart';
 import 'widget/bottom_notice_section.dart';
 import 'widget/category_grid_section.dart';
 import 'widget/feature_section.dart';
 import 'widget/hero_section.dart';
-import '../../auth/view/widget/login_card_section.dart';
 import 'widget/my_asset_card_section.dart';
-import '../../auth/view/widget/register_view_section.dart';
 import 'widget/top_header_section.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,6 +27,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showRegisterView = false;
   String _selectedMenu = 'home';
+
+  final Map<String, Widget> _screenCache = {};
 
   final AssetAccountRepository _assetAccountRepository =
   AssetAccountRepository();
@@ -58,27 +60,34 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // 수정1차: 기존 로그인 세션이 남아 있는 경우 기본 자산계좌 보장
+    // 기존 로그인 세션이 남아 있는 경우 기본 자산계좌 보장
     if (_supabase.auth.currentSession != null) {
       _ensureUserAssetAccounts();
     }
 
-    _authStateSubscription =
-        _supabase.auth.onAuthStateChange.listen((AuthState data) {
-          if (!mounted) return;
+    _authStateSubscription = _supabase.auth.onAuthStateChange.listen((
+        AuthState data,
+        ) {
+      if (!mounted) return;
 
-          if (data.session != null) {
-            // 수정1차: 로그인 상태 진입 시 기본 자산계좌 3개 보장
-            _ensureUserAssetAccounts();
-          }
+      if (data.session != null) {
+        // 로그인 상태 진입 시 기본 자산계좌 3개 보장
+        _ensureUserAssetAccounts();
+      } else {
+        _screenCache.clear();
+      }
 
-          setState(() {
-            if (data.session != null) {
-              _showRegisterView = false;
-              _errorMessage = null;
-            }
-          });
-        });
+      setState(() {
+        if (data.session != null) {
+          _showRegisterView = false;
+          _errorMessage = null;
+        } else {
+          _selectedMenu = 'home';
+          _showRegisterView = false;
+          _errorMessage = null;
+        }
+      });
+    });
   }
 
   @override
@@ -96,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // 수정1차: 은행계좌 / 주식계좌 / 코인계좌 자동 생성 보장
+  // 은행계좌 / 주식계좌 / 코인계좌 자동 생성 보장
   Future<void> _ensureUserAssetAccounts() async {
     try {
       await _assetAccountRepository.ensureUserAssetAccounts();
@@ -159,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 수정83차: 로그인 전 profiles 직접 조회 제거 → RPC로 이메일 조회
+  // 로그인 전 profiles 직접 조회 제거 → RPC로 이메일 조회
   Future<String?> _findEmailByLoginId(String loginId) async {
     final String trimmedId = loginId.trim();
 
@@ -169,9 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final dynamic result = await _supabase.rpc(
       'get_login_email_by_login_id',
-      params: {
-        'p_login_id': trimmedId,
-      },
+      params: {'p_login_id': trimmedId},
     );
 
     final String? email = result as String?;
@@ -203,8 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('존재하지 않는 아이디입니다.');
       }
 
-      final AuthResponse authResponse =
-      await _supabase.auth.signInWithPassword(
+      final AuthResponse authResponse = await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
@@ -215,17 +221,22 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('로그인 사용자 정보를 가져오지 못했습니다.');
       }
 
-      // 수정8차: 로그인 직후 wallet 자동 생성 보장
+      // 로그인 직후 wallet 자동 생성 보장
       await WalletRepository().ensureWallet(user.id);
 
-      // 수정1차: 로그인 직후 기본 자산계좌 3개 자동 생성 보장
+      // 로그인 직후 최초 포인트 지급 보장
+      await PointRepository().ensureUserPoints();
+
+      // 로그인 직후 기본 자산계좌 3개 자동 생성 보장
       await _assetAccountRepository.ensureUserAssetAccounts();
+
+      _screenCache.remove('saving');
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('로그인되었습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('로그인되었습니다.')));
     } on AuthException catch (e) {
       if (!mounted) return;
 
@@ -246,8 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage =
-        e.message.isNotEmpty ? e.message : '로그인 중 오류가 발생했습니다.';
+        _errorMessage = e.message.isNotEmpty ? e.message : '로그인 중 오류가 발생했습니다.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -330,6 +340,14 @@ class _HomeScreenState extends State<HomeScreen> {
         'agree_marketing': false,
       });
 
+      // 회원가입 직후 최초 포인트 지급 보장
+      await PointRepository().ensureUserPoints();
+
+      // 회원가입 직후 기본 자산계좌 3개 자동 생성 보장
+      await _assetAccountRepository.ensureUserAssetAccounts();
+
+      _screenCache.remove('saving');
+
       if (!mounted) return;
 
       _registerIdController.clear();
@@ -345,9 +363,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _showRegisterView = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('회원가입이 완료되었습니다. 로그인해 주세요.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('회원가입이 완료되었습니다. 로그인해 주세요.')));
     } on AuthException catch (e) {
       if (!mounted) return;
 
@@ -387,11 +405,59 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _handleMenuSelected(String menuKey) {
+  Future<void> _handleMenuSelected(String menuKey) async {
+    if (menuKey == 'saving') {
+      await _ensureUserAssetAccounts();
+
+      if (!mounted) return;
+
+      _screenCache.remove('saving');
+    }
+
     setState(() {
       _selectedMenu = menuKey;
       _showRegisterView = false;
       _errorMessage = null;
+    });
+  }
+
+  Widget _buildMainContent({
+    required Session? session,
+    required User? user,
+    required bool isWide,
+  }) {
+    if (_selectedMenu == 'home') {
+      return _buildHomeContent(
+        session: session,
+        user: user,
+        isWide: isWide,
+      );
+    }
+
+    return _screenCache.putIfAbsent(_selectedMenu, () {
+      switch (_selectedMenu) {
+        case 'stock':
+          return const StockScreen();
+
+        case 'saving':
+          return const BankScreen();
+
+        case 'real_estate':
+          return _buildPreparingContent('부동산');
+
+        case 'report':
+          return _buildPreparingContent('리포트');
+
+        case 'asset':
+          return _buildPreparingContent('자산현황');
+
+        default:
+          return _buildHomeContent(
+            session: session,
+            user: user,
+            isWide: isWide,
+          );
+      }
     });
   }
 
@@ -440,37 +506,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMainContent({
-    required Session? session,
-    required User? user,
-    required bool isWide,
-  }) {
-    switch (_selectedMenu) {
-      case 'stock':
-        return const StockScreen();
-
-      case 'saving':
-        return const BankScreen();
-
-      case 'real_estate':
-        return _buildPreparingContent('부동산');
-
-      case 'report':
-        return _buildPreparingContent('리포트');
-
-      case 'asset':
-        return _buildPreparingContent('자산현황');
-
-      case 'home':
-      default:
-        return _buildHomeContent(
-          session: session,
-          user: user,
-          isWide: isWide,
-        );
-    }
-  }
-
   Widget _buildHomeContent({
     required Session? session,
     required User? user,
@@ -481,24 +516,19 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1400),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 24,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isWide)
                   SizedBox(
-                    height: 342,
+                    height: 380,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(
                           flex: 7,
-                          child: HeroSection(
-                            user: user,
-                          ),
+                          child: HeroSection(user: user),
                         ),
                         const SizedBox(width: 24),
                         Expanded(
@@ -506,16 +536,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: session == null
                               ? LoginCardSection(
                             idController: _loginIdController,
-                            passwordController:
-                            _loginPasswordController,
+                            passwordController: _loginPasswordController,
                             errorMessage: _errorMessage,
                             isLoading: _isLoading,
                             onTapLogin: _handleLogin,
                             onTapRegister: _openRegisterView,
                           )
-                              : MyAssetCardSection(
-                            user: user,
-                          ),
+                              : MyAssetCardSection(user: user),
                         ),
                       ],
                     ),
@@ -528,16 +555,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       session == null
                           ? LoginCardSection(
                         idController: _loginIdController,
-                        passwordController:
-                        _loginPasswordController,
+                        passwordController: _loginPasswordController,
                         errorMessage: _errorMessage,
                         isLoading: _isLoading,
                         onTapLogin: _handleLogin,
                         onTapRegister: _openRegisterView,
                       )
-                          : MyAssetCardSection(
-                        user: user,
-                      ),
+                          : MyAssetCardSection(user: user),
                     ],
                   ),
                 const SizedBox(height: 20),
@@ -545,8 +569,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTapStock: () => _handleMenuSelected('stock'),
                   onTapEtf: () => _handleMenuSelected('etf'),
                   onTapSaving: () => _handleMenuSelected('saving'),
-                  onTapRealEstate: () =>
-                      _handleMenuSelected('real_estate'),
+                  onTapRealEstate: () => _handleMenuSelected('real_estate'),
                   onTapReport: () => _handleMenuSelected('report'),
                   onTapAsset: () => _handleMenuSelected('asset'),
                 ),
