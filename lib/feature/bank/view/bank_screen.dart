@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:stock/feature/asset_account/repository/asset_account_repository.dart';
 import 'package:stock/feature/bank/model/bank_product_model.dart';
 import 'package:stock/feature/bank/model/user_bank_account_model.dart';
 import 'package:stock/feature/bank/repository/bank_repository.dart';
@@ -14,19 +13,15 @@ class BankScreen extends StatefulWidget {
 
 class _BankScreenState extends State<BankScreen> {
   final BankRepository _repository = BankRepository();
-  final AssetAccountRepository _assetAccountRepository =
-  AssetAccountRepository();
 
   bool _isLoading = true;
   bool _isProcessing = false;
 
   String _selectedProductType = 'deposit';
 
-  List<Map<String, dynamic>> _assetAccounts = [];
   List<BankProductModel> _depositProducts = [];
   List<BankProductModel> _savingsProducts = [];
   List<UserBankAccountModel> _myBankAccounts = [];
-  List<Map<String, dynamic>> _bankTransactions = [];
 
   final NumberFormat _moneyFormat = NumberFormat('#,###');
 
@@ -36,40 +31,23 @@ class _BankScreenState extends State<BankScreen> {
     _loadBankData();
   }
 
-  // 수정19차: 계좌 화면 전체 데이터 조회
+  // 수정3차: 예금/적금 화면 전체 데이터 조회
   Future<void> _loadBankData() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // 수정20차: 계좌 화면 진입 시 기본 자산계좌 생성 보장
-      await _assetAccountRepository.ensureUserAssetAccounts();
-
-      final assetAccounts =
-      await _assetAccountRepository.fetchUserAssetAccounts();
       final depositProducts = await _repository.fetchDepositProducts();
       final savingsProducts = await _repository.fetchSavingsProducts();
       final myBankAccounts = await _repository.fetchMyActiveBankAccounts();
-      final bankTransactions =
-      await _assetAccountRepository.fetchAssetAccountTransactions(
-        reasons: [
-          'asset_to_deposit',
-          'deposit_to_asset',
-          'asset_to_savings',
-          'savings_to_asset',
-        ],
-        limit: 20,
-      );
 
       if (!mounted) return;
 
       setState(() {
-        _assetAccounts = assetAccounts;
         _depositProducts = depositProducts;
         _savingsProducts = savingsProducts;
         _myBankAccounts = myBankAccounts;
-        _bankTransactions = bankTransactions;
         _isLoading = false;
       });
     } catch (e) {
@@ -86,13 +64,15 @@ class _BankScreenState extends State<BankScreen> {
     }
   }
 
-  // 수정19차: 예금/적금 가입 다이얼로그
+  // 수정3차: 예금/적금 가입 다이얼로그
   Future<void> _openJoinDialog(BankProductModel product) async {
     final TextEditingController amountController = TextEditingController();
 
-    final String amountLabel = product.isDeposit ? '가입 금액' : '1회 납입 금액';
+    final String amountLabel =
+    product.isDeposit ? '가입 금액' : '1회 납입 금액';
 
-    final String buttonLabel = product.isDeposit ? '예금 가입' : '적금 가입';
+    final String buttonLabel =
+    product.isDeposit ? '예금 가입' : '적금 가입';
 
     await showDialog<void>(
       context: context,
@@ -101,7 +81,9 @@ class _BankScreenState extends State<BankScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             Future<void> submit() async {
-              final rawText = amountController.text.replaceAll(',', '').trim();
+              final rawText = amountController.text
+                  .replaceAll(',', '')
+                  .trim();
 
               final amount = double.tryParse(rawText);
 
@@ -120,17 +102,20 @@ class _BankScreenState extends State<BankScreen> {
 
                 _showMessageDialog(
                   title: '안내',
-                  message: '최소 금액은 ${_formatMoney(product.minAmount)}원입니다.',
+                  message:
+                  '최소 금액은 ${_formatMoney(product.minAmount)}원입니다.',
                 );
                 return;
               }
 
-              if (product.maxAmount != null && amount > product.maxAmount!) {
+              if (product.maxAmount != null &&
+                  amount > product.maxAmount!) {
                 Navigator.of(dialogContext).pop();
 
                 _showMessageDialog(
                   title: '안내',
-                  message: '최대 금액은 ${_formatMoney(product.maxAmount!)}원입니다.',
+                  message:
+                  '최대 금액은 ${_formatMoney(product.maxAmount!)}원입니다.',
                 );
                 return;
               }
@@ -207,11 +192,6 @@ class _BankScreenState extends State<BankScreen> {
                       value: '${product.termDays}일',
                     ),
                     _buildJoinInfoRow(
-                      label: '중도해지',
-                      value:
-                      '이자 ${(product.earlyCancelRate * 100).toStringAsFixed(0)}% 인정',
-                    ),
-                    _buildJoinInfoRow(
                       label: '최소 금액',
                       value: '${_formatMoney(product.minAmount)}원',
                     ),
@@ -221,9 +201,10 @@ class _BankScreenState extends State<BankScreen> {
                           ? '제한 없음'
                           : '${_formatMoney(product.maxAmount!)}원',
                     ),
-                    if (product.isSavings && product.installmentCount != null)
+                    if (product.isSavings &&
+                        product.installmentCount != null)
                       _buildJoinInfoRow(
-                        label: '납입 회차',
+                        label: '총 납입 회차',
                         value: '${product.installmentCount}회',
                       ),
                     const SizedBox(height: 18),
@@ -350,118 +331,7 @@ class _BankScreenState extends State<BankScreen> {
     amountController.dispose();
   }
 
-  // 수정8차: 적금 회차 납입
-  Future<void> _paySavingsInstallment(UserBankAccountModel account) async {
-    if (_isProcessing) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
-    try {
-      await _repository.paySavingsInstallment(
-        accountId: account.id,
-      );
-
-      if (!mounted) return;
-
-      _showMessageDialog(
-        title: '완료',
-        message: '적금 납입이 완료되었습니다.',
-      );
-
-      await _loadBankData();
-    } catch (e) {
-      if (!mounted) return;
-
-      _showMessageDialog(
-        title: '안내',
-        message: e.toString().replaceFirst('Exception: ', ''),
-      );
-    } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-  // 수정9차: 예금/적금 만기 수령
-  Future<void> _claimBankProductAccount(UserBankAccountModel account) async {
-    if (_isProcessing) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
-    try {
-      await _repository.claimBankProductAccount(
-        accountId: account.id,
-      );
-
-      if (!mounted) return;
-
-      _showMessageDialog(
-        title: '완료',
-        message: '만기 수령이 완료되었습니다.',
-      );
-
-      await _loadBankData();
-    } catch (e) {
-      if (!mounted) return;
-
-      _showMessageDialog(
-        title: '안내',
-        message: e.toString().replaceFirst('Exception: ', ''),
-      );
-    } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-  // 수정10차: 예금/적금 중도해지
-  Future<void> _cancelBankProductAccount(UserBankAccountModel account) async {
-    if (_isProcessing) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
-    try {
-      await _repository.cancelBankProductAccount(
-        accountId: account.id,
-      );
-
-      if (!mounted) return;
-
-      _showMessageDialog(
-        title: '완료',
-        message: '중도해지가 완료되었습니다.',
-      );
-
-      await _loadBankData();
-    } catch (e) {
-      if (!mounted) return;
-
-      _showMessageDialog(
-        title: '안내',
-        message: e.toString().replaceFirst('Exception: ', ''),
-      );
-    } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-  // 수정19차: 공통 안내 팝업
+  // 수정3차: 공통 안내 팝업
   Future<void> _showMessageDialog({
     required String title,
     required String message,
@@ -520,8 +390,9 @@ class _BankScreenState extends State<BankScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentProducts =
-    _selectedProductType == 'deposit' ? _depositProducts : _savingsProducts;
+    final currentProducts = _selectedProductType == 'deposit'
+        ? _depositProducts
+        : _savingsProducts;
 
     return Container(
       color: const Color(0xFFF5F7FB),
@@ -536,20 +407,16 @@ class _BankScreenState extends State<BankScreen> {
           children: [
             _buildPageHeader(),
             const SizedBox(height: 20),
-            _buildAssetAccountSection(),
-            const SizedBox(height: 20),
-            _buildMyBankProductAccountSection(),
+            _buildMyAccountSection(),
             const SizedBox(height: 20),
             _buildProductSection(currentProducts),
-            const SizedBox(height: 20),
-            _buildBankTransactionSection(),
           ],
         ),
       ),
     );
   }
 
-  // 수정19차: 페이지 상단 제목
+  // 수정3차: 페이지 상단 제목
   Widget _buildPageHeader() {
     return Container(
       width: double.infinity,
@@ -565,7 +432,7 @@ class _BankScreenState extends State<BankScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '계좌',
+            '예금 · 적금',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w900,
@@ -574,7 +441,7 @@ class _BankScreenState extends State<BankScreen> {
           ),
           SizedBox(height: 8),
           Text(
-            '입출금, 주식, 코인 계좌와 예금·적금 상품 계좌를 관리합니다.',
+            '보유 현금을 예금 또는 적금 상품에 배치하여 안정적인 이자를 받을 수 있습니다.',
             style: TextStyle(
               fontSize: 14,
               color: Color(0xFF6B7280),
@@ -585,14 +452,8 @@ class _BankScreenState extends State<BankScreen> {
     );
   }
 
-  // 수정19차: 입출금/주식/코인 계좌 영역
-  Widget _buildAssetAccountSection() {
-    final List<Map<String, dynamic>> orderedAccounts = [
-      ..._assetAccounts.where((account) => account['account_type'] == 'bank'),
-      ..._assetAccounts.where((account) => account['account_type'] == 'stock'),
-      ..._assetAccounts.where((account) => account['account_type'] == 'coin'),
-    ];
-
+  // 수정3차: 내 가입 상품 영역
+  Widget _buildMyAccountSection() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
@@ -607,147 +468,12 @@ class _BankScreenState extends State<BankScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '내 계좌',
+            '내 예금 · 적금',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
               color: Color(0xFF111827),
             ),
-          ),
-          const SizedBox(height: 16),
-          if (orderedAccounts.isEmpty)
-            Container(
-              width: double.infinity,
-              height: 92,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFFE5E7EB),
-                ),
-              ),
-              child: const Text(
-                '생성된 계좌가 없습니다.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF6B7280),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            )
-          else
-            Row(
-              children: [
-                for (int i = 0; i < orderedAccounts.length; i++) ...[
-                  Expanded(
-                    child: _buildAssetAccountCard(orderedAccounts[i]),
-                  ),
-                  if (i != orderedAccounts.length - 1)
-                    const SizedBox(width: 12),
-                ],
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAssetAccountCard(Map<String, dynamic> account) {
-    final String accountType = account['account_type']?.toString() ?? '';
-    final String accountName = account['account_name']?.toString() ?? '-';
-    final double cashBalance = _toDouble(account['cash_balance']);
-
-    final String typeLabel = _assetAccountTypeLabel(accountType);
-
-    return Container(
-      height: 118,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            typeLabel,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF6B7280),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            accountName,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF111827),
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          const Spacer(),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              '${_formatMoney(cashBalance)}원',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF1D4ED8),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 수정19차: 가입한 예금/적금 계좌 영역
-  Widget _buildMyBankProductAccountSection() {
-    final int depositCount =
-        _myBankAccounts.where((account) => account.isDeposit).length;
-    final int savingsCount =
-        _myBankAccounts.where((account) => account.isSavings).length;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                '금융상품 계좌',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF111827),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '예금 $depositCount건 · 적금 $savingsCount건',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF6B7280),
-                ),
-              ),
-            ],
           ),
           const SizedBox(height: 16),
           if (_myBankAccounts.isEmpty)
@@ -786,9 +512,10 @@ class _BankScreenState extends State<BankScreen> {
     );
   }
 
-  // 수정19차: 내 예금/적금 계좌 카드
+  // 수정3차: 내 예금/적금 계좌 카드
   Widget _buildMyAccountCard(UserBankAccountModel account) {
-    final String accountTypeLabel = account.isDeposit ? '예금' : '적금';
+    final String accountTypeLabel =
+    account.isDeposit ? '예금' : '적금';
 
     final String dueText = account.isDeposit
         ? '만기일 ${_formatDate(account.maturityAt)}'
@@ -865,14 +592,16 @@ class _BankScreenState extends State<BankScreen> {
               Expanded(
                 child: _buildAccountStat(
                   label: '예상 이자',
-                  value: '${_formatMoney(account.expectedInterestAmount)}원',
+                  value:
+                  '${_formatMoney(account.expectedInterestAmount)}원',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _buildAccountStat(
                   label: '만기 예상액',
-                  value: '${_formatMoney(account.expectedMaturityAmount)}원',
+                  value:
+                  '${_formatMoney(account.expectedMaturityAmount)}원',
                 ),
               ),
             ],
@@ -900,99 +629,24 @@ class _BankScreenState extends State<BankScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  height: 34,
-                  child: ElevatedButton(
-                    onPressed: _isProcessing ||
-                        account.paidInstallments >=
-                            (account.totalInstallments ?? 0)
-                        ? null
-                        : () {
-                      _paySavingsInstallment(account);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF111827),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                    ),
-                    child: Text(
-                      account.paidInstallments >=
-                          (account.totalInstallments ?? 0)
-                          ? '완납'
-                          : '납입',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ],
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  dueText,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF6B7280),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 34,
-                child: OutlinedButton(
-                  onPressed: _isProcessing
-                      ? null
-                      : () {
-                    final bool isMatured =
-                    DateTime.now().isAfter(account.maturityAt);
-
-                    if (isMatured) {
-                      _claimBankProductAccount(account);
-                    } else {
-                      _cancelBankProductAccount(account);
-                    }
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF111827),
-                    side: const BorderSide(
-                      color: Color(0xFFD1D5DB),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  child: Text(
-                    DateTime.now().isAfter(account.maturityAt)
-                        ? '만기 수령'
-                        : '중도해지',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          Text(
+            dueText,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF6B7280),
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // 수정19차: 예금/적금 상품 영역
+  // 수정3차: 예금/적금 상품 영역
   Widget _buildProductSection(List<BankProductModel> currentProducts) {
     return Container(
       width: double.infinity,
@@ -1066,195 +720,7 @@ class _BankScreenState extends State<BankScreen> {
     );
   }
 
-  // 수정13차: 계좌 거래내역 영역
-  Widget _buildBankTransactionSection() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                '거래내역',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF111827),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '최근 ${_bankTransactions.length}건',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF6B7280),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_bankTransactions.isEmpty)
-            Container(
-              width: double.infinity,
-              height: 92,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFFE5E7EB),
-                ),
-              ),
-              child: const Text(
-                '거래내역이 없습니다.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF6B7280),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            )
-          else
-            Column(
-              children: [
-                for (int i = 0; i < _bankTransactions.length; i++) ...[
-                  _buildBankTransactionRow(_bankTransactions[i]),
-                  if (i != _bankTransactions.length - 1)
-                    const Divider(
-                      height: 1,
-                      color: Color(0xFFE5E7EB),
-                    ),
-                ],
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBankTransactionRow(Map<String, dynamic> transaction) {
-    final String type = transaction['type']?.toString() ?? '';
-    final String reason = transaction['reason']?.toString() ?? '';
-    final String title = transaction['title']?.toString() ?? '-';
-    final String memo = transaction['memo']?.toString() ?? '';
-    final double amount = _toDouble(transaction['amount']);
-    final double balanceAfter = _toDouble(transaction['balance_after']);
-    final DateTime? createdAt = _toNullableDateTime(transaction['created_at']);
-
-    final bool isDeposit = type == 'deposit';
-
-    return Container(
-      constraints: const BoxConstraints(
-        minHeight: 70,
-      ),
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 76,
-            height: 32,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color:
-              isDeposit ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              isDeposit ? '입금' : '출금',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                color: isDeposit
-                    ? const Color(0xFF15803D)
-                    : const Color(0xFFB91C1C),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  memo.isEmpty ? _transactionReasonLabel(reason) : memo,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF6B7280),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          SizedBox(
-            width: 150,
-            child: Text(
-              '${isDeposit ? '+' : '-'}${_formatMoney(amount)}원',
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                color: isDeposit
-                    ? const Color(0xFF15803D)
-                    : const Color(0xFFB91C1C),
-              ),
-            ),
-          ),
-          const SizedBox(width: 18),
-          SizedBox(
-            width: 150,
-            child: Text(
-              '잔액 ${_formatMoney(balanceAfter)}원',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF374151),
-              ),
-            ),
-          ),
-          const SizedBox(width: 18),
-          SizedBox(
-            width: 120,
-            child: Text(
-              createdAt == null ? '-' : _formatDateTime(createdAt),
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF6B7280),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 수정19차: 예금/적금 상품 카드
+  // 수정3차: 예금/적금 상품 카드
   Widget _buildProductCard(BankProductModel product) {
     final String typeLabel = product.isDeposit ? '예금' : '적금';
 
@@ -1310,9 +776,7 @@ class _BankScreenState extends State<BankScreen> {
                         ),
                       ),
                       child: Text(
-                        product.bankName.isEmpty
-                            ? '은행 미지정'
-                            : product.bankName,
+                        product.bankName.isEmpty ? '은행 미지정' : product.bankName,
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w900,
@@ -1362,13 +826,11 @@ class _BankScreenState extends State<BankScreen> {
                           ? '최대 제한 없음'
                           : '최대 ${_formatMoney(product.maxAmount!)}원',
                     ),
-                    if (product.isSavings && product.installmentCount != null)
+                    if (product.isSavings &&
+                        product.installmentCount != null)
                       _buildProductMetaText(
                         '${product.installmentCount}회 납입',
                       ),
-                    _buildProductMetaText(
-                      '중도해지 이자 ${(product.earlyCancelRate * 100).toStringAsFixed(0)}%',
-                    ),
                   ],
                 ),
               ],
@@ -1419,11 +881,14 @@ class _BankScreenState extends State<BankScreen> {
           });
         },
         style: OutlinedButton.styleFrom(
-          backgroundColor: isSelected ? const Color(0xFF111827) : Colors.white,
-          foregroundColor: isSelected ? Colors.white : const Color(0xFF111827),
+          backgroundColor:
+          isSelected ? const Color(0xFF111827) : Colors.white,
+          foregroundColor:
+          isSelected ? Colors.white : const Color(0xFF111827),
           side: BorderSide(
-            color:
-            isSelected ? const Color(0xFF111827) : const Color(0xFFD1D5DB),
+            color: isSelected
+                ? const Color(0xFF111827)
+                : const Color(0xFFD1D5DB),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -1528,34 +993,6 @@ class _BankScreenState extends State<BankScreen> {
     );
   }
 
-  String _assetAccountTypeLabel(String accountType) {
-    switch (accountType) {
-      case 'bank':
-        return '입출금 계좌';
-      case 'stock':
-        return '주식 계좌';
-      case 'coin':
-        return '코인 계좌';
-      default:
-        return accountType;
-    }
-  }
-
-  String _transactionReasonLabel(String reason) {
-    switch (reason) {
-      case 'asset_to_deposit':
-        return '생활 현금 계좌에서 예금으로 이동';
-      case 'deposit_to_asset':
-        return '예금에서 생활 현금 계좌로 입금';
-      case 'asset_to_savings':
-        return '생활 현금 계좌에서 적금으로 이동';
-      case 'savings_to_asset':
-        return '적금에서 생활 현금 계좌로 입금';
-      default:
-        return reason;
-    }
-  }
-
   String _formatMoney(double value) {
     return _moneyFormat.format(value.floor());
   }
@@ -1567,21 +1004,5 @@ class _BankScreenState extends State<BankScreen> {
   String _formatNullableDate(DateTime? date) {
     if (date == null) return '-';
     return DateFormat('yyyy.MM.dd').format(date.toLocal());
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    return DateFormat('MM.dd HH:mm').format(dateTime.toLocal());
-  }
-
-  DateTime? _toNullableDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-    return DateTime.tryParse(value.toString());
-  }
-
-  double _toDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString()) ?? 0;
   }
 }
