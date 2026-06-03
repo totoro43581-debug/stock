@@ -90,7 +90,7 @@ class AssetTransactionListWidget extends StatelessWidget {
   Widget _buildTransactionRow(Map<String, dynamic> transaction) {
     final String type = transaction['type']?.toString() ?? '';
     final String reason = transaction['reason']?.toString() ?? '';
-    final String title = transaction['title']?.toString() ?? '-';
+    final String rowTitle = transaction['title']?.toString() ?? '-';
     final String memo = transaction['memo']?.toString() ?? '';
     final double amount = _toDouble(transaction['amount']);
     final double balanceAfter = _toDouble(transaction['balance_after']);
@@ -112,9 +112,8 @@ class AssetTransactionListWidget extends StatelessWidget {
             height: 32,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: isDeposit
-                  ? const Color(0xFFDCFCE7)
-                  : const Color(0xFFFEE2E2),
+              color:
+              isDeposit ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
@@ -134,7 +133,7 @@ class AssetTransactionListWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  rowTitle,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w900,

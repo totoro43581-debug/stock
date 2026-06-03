@@ -136,7 +136,7 @@ class StockPendingOrderSection extends StatelessWidget {
       padding: EdgeInsets.zero,
       physics: const ClampingScrollPhysics(),
       itemCount: pendingOrders.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      separatorBuilder: (context, index) => const SizedBox(height: 6),
       itemBuilder: (context, index) {
         return _buildPendingOrderRow(pendingOrders[index]);
       },
@@ -146,9 +146,8 @@ class StockPendingOrderSection extends StatelessWidget {
   Widget _buildPendingOrderRow(StockPendingOrderModel item) {
     final bool isBuy = item.orderType == 'buy';
 
-    final Color pointColor = isBuy
-        ? const Color(0xFFDC2626)
-        : const Color(0xFF2563EB);
+    final Color pointColor =
+    isBuy ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
 
     final String orderTypeLabel = isBuy ? '매수' : '매도';
 

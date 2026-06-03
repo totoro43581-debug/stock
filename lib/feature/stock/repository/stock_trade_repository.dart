@@ -197,6 +197,12 @@ class StockTradeRepository {
     return ((response['cash_balance'] ?? 0) as num).round();
   }
 
+  // 수정105차: 주식화면 표시용 주식계좌 현금 조회
+  Future<double> fetchStockAccountCashBalance(String userId) async {
+    final cash = await _fetchStockAccountCash(userId);
+    return cash.toDouble();
+  }
+
   // 수정104차: 주식계좌 현금 변경
   Future<void> _updateStockAccountCash({
     required String userId,
@@ -282,10 +288,23 @@ class StockTradeRepository {
           .eq('id', existing['id']);
     }
 
+    final int stockCashAfterBuy = latestStockCash - totalAmount;
+
     await _updateStockAccountCash(
       userId: userId,
-      cashBalance: latestStockCash - totalAmount,
+      cashBalance: stockCashAfterBuy,
     );
+
+    await _client.from('asset_account_transactions').insert({
+      'user_id': userId,
+      'type': 'withdraw',
+      'reason': 'asset_to_stock',
+      'amount': totalAmount,
+      'balance_after': stockCashAfterBuy,
+      'title': '주식 매수',
+      'memo': '$stockName $quantity주',
+      'created_at': DateTime.now().toIso8601String(),
+    });
 
     // 수정41차: stock_item_id 포함해서 거래 저장
     final stockItem = await _client
@@ -383,10 +402,23 @@ class StockTradeRepository {
           .eq('id', existing['id']);
     }
 
+    final int stockCashAfterSell = latestStockCash + totalAmount;
+
     await _updateStockAccountCash(
       userId: userId,
-      cashBalance: latestStockCash + totalAmount,
+      cashBalance: stockCashAfterSell,
     );
+
+    await _client.from('asset_account_transactions').insert({
+      'user_id': userId,
+      'type': 'deposit',
+      'reason': 'stock_to_asset',
+      'amount': totalAmount,
+      'balance_after': stockCashAfterSell,
+      'title': '주식 매도',
+      'memo': '$stockName $quantity주',
+      'created_at': DateTime.now().toIso8601String(),
+    });
 
     final stockItem = await _client
         .from('stock_item')

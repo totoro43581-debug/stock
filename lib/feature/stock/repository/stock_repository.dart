@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StockRepository {
@@ -43,14 +44,14 @@ class StockRepository {
   Future<Map<String, dynamic>> applyActiveStockNewsEvents({
     bool force = false,
   }) async {
-    print('수정103차 RPC 호출 시작 / force = $force');
+    debugPrint('수정103차 RPC 호출 시작 / force = $force');
 
     final response = await _client.rpc(
       'apply_active_stock_news_events',
       params: {'p_force': force},
     );
 
-    print('수정103차 RPC 원본 응답 = $response');
+    debugPrint('수정103차 RPC 원본 응답 = $response');
 
     if (response == null) {
       final emptyResult = {
@@ -62,14 +63,14 @@ class StockRepository {
         'stock_count': 0,
       };
 
-      print('수정103차 RPC 빈 응답 처리 = $emptyResult');
+      debugPrint('수정103차 RPC 빈 응답 처리 = $emptyResult');
 
       return emptyResult;
     }
 
     final result = Map<String, dynamic>.from(response as Map);
 
-    print('수정103차 RPC 변환 결과 = $result');
+    debugPrint('수정103차 RPC 변환 결과 = $result');
 
     return result;
   }

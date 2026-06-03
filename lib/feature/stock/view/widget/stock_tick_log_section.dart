@@ -70,8 +70,12 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
     final limitedLogs = visibleLogs.take(30).toList();
 
     return MouseRegion(
-      onEnter: (_) => widget.onHoverChanged(true),
-      onExit: (_) => widget.onHoverChanged(false),
+      onEnter: (event) {
+        widget.onHoverChanged(true);
+      },
+      onExit: (event) {
+        widget.onHoverChanged(false);
+      },
       child: Listener(
         behavior: HitTestBehavior.opaque,
         onPointerSignal: (event) {
@@ -113,7 +117,7 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
                   padding: EdgeInsets.zero,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: limitedLogs.length,
-                  separatorBuilder: (_, __) {
+                  separatorBuilder: (context, index) {
                     return const SizedBox(height: 6);
                   },
                   itemBuilder: (context, index) {
@@ -237,7 +241,7 @@ class _StockTickLogSectionState extends State<StockTickLogSection> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: index == 0 && _flashVisible
-            ? color.withOpacity(0.08)
+            ? color.withValues(alpha: 0.08)
             : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE5E7EB)),

@@ -93,11 +93,11 @@ class _DailyQuestSectionState extends State<DailyQuestSection> {
         ),
       );
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isClaiming = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isClaiming = false;
+        });
+      }
     }
   }
 
@@ -158,19 +158,19 @@ class _DailyQuestSectionState extends State<DailyQuestSection> {
     }
 
     return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFEF3C7),
-          borderRadius: BorderRadius.circular(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Text(
+        '진행 중',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF92400E),
         ),
-        child: const Text(
-          '진행 중',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF92400E),
-          ),
-        )
+      ),
     );
   }
 

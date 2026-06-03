@@ -30,6 +30,53 @@ class AssetAccountRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  // 수정37차: 특정 자산계좌 현금 조회
+  Future<double> fetchAccountCashBalance({
+    required String accountType,
+  }) async {
+    final user = _client.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    final response = await _client
+        .from('user_asset_accounts')
+        .select('cash_balance')
+        .eq('user_id', user.id)
+        .eq('account_type', accountType)
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (response == null) {
+      throw Exception('${_accountTypeLabel(accountType)} 계좌를 찾을 수 없습니다.');
+    }
+
+    return _toDouble(response['cash_balance']);
+  }
+
+  // 수정37차: 특정 자산계좌 현금 변경
+  Future<void> updateAccountCashBalance({
+    required String accountType,
+    required double cashBalance,
+  }) async {
+    final user = _client.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    await _client
+        .from('user_asset_accounts')
+        .update({
+      'cash_balance': cashBalance,
+      'updated_at': DateTime.now().toIso8601String(),
+    })
+        .eq('user_id', user.id)
+        .eq('account_type', accountType)
+        .eq('is_active', true);
+  }
+
   // 수정13차: 자산 계좌 간 이체 RPC 호출
   Future<Map<String, dynamic>> transferAssetAccountBalance({
     required String fromAccountType,
@@ -71,6 +118,7 @@ class AssetAccountRepository {
       'balance_after': balanceAfter,
       'title': title,
       'memo': memo,
+      'created_at': DateTime.now().toIso8601String(),
     });
   }
 
@@ -99,5 +147,24 @@ class AssetAccountRepository {
         .limit(limit);
 
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  String _accountTypeLabel(String accountType) {
+    switch (accountType) {
+      case 'bank':
+        return '생활 현금';
+      case 'stock':
+        return '주식 투자';
+      case 'coin':
+        return '코인 투자';
+      default:
+        return accountType;
+    }
+  }
+
+  double _toDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
   }
 }

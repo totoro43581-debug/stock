@@ -13,8 +13,7 @@ class StockSellService {
     required List<StockPendingOrderModel> pendingOrders,
     required String stockCode,
   }) {
-    final reservedSellQuantity =
-    _pendingOrderService.reservedSellQuantity(
+    final reservedSellQuantity = _pendingOrderService.reservedSellQuantity(
       pendingOrders: pendingOrders,
       stockCode: stockCode,
     );
@@ -51,7 +50,7 @@ class StockSellService {
         quantity: quantity,
       );
 
-      return '시장가 매도 완료: ${item.name} ${quantity}주';
+      return '시장가 매도 완료: ${item.name} $quantity주';
     }
 
     // 수정76차: 지정가 주문가가 현재가와 같으면 즉시 체결
@@ -66,7 +65,7 @@ class StockSellService {
         quantity: quantity,
       );
 
-      return '지정가 매도 체결: ${item.name} ${quantity}주';
+      return '지정가 매도 체결: ${item.name} $quantity주';
     }
 
     final hasSameOrder = _pendingOrderService.hasSamePendingOrder(
@@ -89,6 +88,6 @@ class StockSellService {
       quantity: quantity,
     );
 
-    return '지정가 매도 주문 등록: ${item.name} ${quantity}주';
+    return '지정가 매도 주문 등록: ${item.name} $quantity주';
   }
 }

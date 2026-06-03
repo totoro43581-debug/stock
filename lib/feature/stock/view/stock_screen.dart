@@ -21,10 +21,7 @@ import 'package:stock/feature/stock/view/widget/stock_summary_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_tick_log_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_trade_history_section.dart';
 import 'package:stock/feature/stock/view/widget/stock_trade_panel_section.dart';
-import 'package:stock/feature/wallet/model/wallet_model.dart';
-import 'package:stock/feature/wallet/repository/wallet_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -37,7 +34,6 @@ class _StockScreenState extends State<StockScreen> {
   final StockRepository _stockRepository = StockRepository();
   final StockTradeRepository _stockTradeRepository = StockTradeRepository();
   final StockPriceRepository _stockPriceRepository = StockPriceRepository();
-  final WalletRepository _walletRepository = WalletRepository();
 
   // 수정75차: 매수/매도 로직 서비스 분리
   final StockBuyService _stockBuyService = StockBuyService();
@@ -56,7 +52,7 @@ class _StockScreenState extends State<StockScreen> {
   bool _isRealtimeUpdating = false;
   bool _isWalletLoading = false;
   bool _isTrading = false;
-  bool _showOnlyOwned = false;
+  final bool _showOnlyOwned = false;
   bool _isBuyOrder = true;
   bool _isMarketOrder = false;
   bool _isChartLoading = false;
@@ -64,7 +60,7 @@ class _StockScreenState extends State<StockScreen> {
 
   DateTime? _lastRealtimeUpdatedAt;
 
-  WalletModel? _wallet;
+  double _stockAccountCash = 0;
 
   List<StockItemViewModel> _marketItems = [];
   List<StockHoldingModel> _holdingItems = [];
@@ -342,7 +338,7 @@ class _StockScreenState extends State<StockScreen> {
 
           // 수정88차: 현실형 가상 종목 정보 매핑
           description:
-              (row['company_description'] ?? '').toString().trim().isEmpty
+          (row['company_description'] ?? '').toString().trim().isEmpty
               ? '등록된 기업 설명이 없습니다.'
               : (row['company_description'] ?? '').toString(),
           stockType: (row['stock_type'] ?? 'domestic_large').toString(),
@@ -376,7 +372,7 @@ class _StockScreenState extends State<StockScreen> {
 
           try {
             _selectedMarketItem = items.firstWhere(
-              (item) => item.code == selectedCode,
+                  (item) => item.code == selectedCode,
             );
           } catch (_) {}
         }
@@ -387,11 +383,13 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  // 수정105차: 주식화면 현금은 user_wallet이 아니라 주식 투자 계좌 기준
   Future<void> _loadWallet() async {
     if (!_isLoggedIn || _user == null) {
       if (!mounted) return;
+
       setState(() {
-        _wallet = null;
+        _stockAccountCash = 0;
         _isWalletLoading = false;
       });
       return;
@@ -399,24 +397,30 @@ class _StockScreenState extends State<StockScreen> {
 
     try {
       if (!mounted) return;
+
       setState(() {
         _isWalletLoading = true;
       });
 
-      final wallet = await _walletRepository.ensureWallet(_user!.id);
+      final cash = await _stockTradeRepository.fetchStockAccountCashBalance(
+        _user!.id,
+      );
 
       if (!mounted) return;
+
       setState(() {
-        _wallet = wallet;
+        _stockAccountCash = cash;
       });
     } catch (e) {
       if (!mounted) return;
-      _showSnackBar('지갑 정보를 불러오지 못했습니다: $e');
+
+      _showSnackBar('주식계좌 현금을 불러오지 못했습니다: $e');
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isWalletLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isWalletLoading = false;
+        });
+      }
     }
   }
 
@@ -570,10 +574,10 @@ class _StockScreenState extends State<StockScreen> {
 
   // 수정74차: 자동갱신 시 차트 전체 깜빡임 방지
   Future<void> _loadStockChart(
-    String stockId,
-    String stockName, {
-    bool showLoading = true,
-  }) async {
+      String stockId,
+      String stockName, {
+        bool showLoading = true,
+      }) async {
     if (showLoading) {
       setState(() {
         _isChartLoading = true;
@@ -587,19 +591,20 @@ class _StockScreenState extends State<StockScreen> {
       );
 
       if (!mounted) return;
+
       setState(() {
         _selectedStockPrices = prices;
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         _selectedStockPrices = [];
       });
+
       _showSnackBar('차트 데이터를 불러오지 못했습니다: $e');
     } finally {
-      if (!mounted) return;
-
-      if (showLoading) {
+      if (mounted && showLoading) {
         setState(() {
           _isChartLoading = false;
         });
@@ -627,32 +632,6 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-  Future<void> _processPendingOrdersManually() async {
-    final beforeCount = _pendingOrderItems.length;
-
-    try {
-      await _stockTradeRepository.processPendingOrders();
-
-      await _loadWallet();
-      await _loadHoldings();
-      await _loadTradeHistory();
-      await _loadPendingOrders();
-
-      final afterCount = _pendingOrderItems.length;
-
-      if (!mounted) return;
-
-      if (beforeCount > afterCount) {
-        _showSnackBar('지정가 주문이 체결되었습니다.');
-      } else {
-        _showSnackBar('체결 가능한 지정가 주문이 없습니다.');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      _showSnackBar('지정가 체결 확인 실패: $e');
-    }
-  }
-
   String _mapMarketLabel(String market) {
     switch (market.toUpperCase()) {
       case 'KOSPI':
@@ -667,7 +646,7 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-  double get _cash => (_wallet?.cashBalance ?? 0).toDouble();
+  double get _cash => _stockAccountCash;
 
   double get _orderPrice {
     if (_isMarketOrder) {
@@ -971,10 +950,11 @@ class _StockScreenState extends State<StockScreen> {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isTrading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isTrading = false;
+        });
+      }
     }
   }
 
@@ -1034,10 +1014,11 @@ class _StockScreenState extends State<StockScreen> {
       if (!mounted) return;
       _showSnackBar(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isTrading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isTrading = false;
+        });
+      }
     }
   }
 
@@ -1052,7 +1033,7 @@ class _StockScreenState extends State<StockScreen> {
       child: ScrollConfiguration(
         behavior: const MaterialScrollBehavior().copyWith(scrollbars: false),
         child: NotificationListener<ScrollNotification>(
-          onNotification: (_) {
+          onNotification: (notification) {
             _lockPageScrollWhileTickHovered();
             return false;
           },
@@ -1077,14 +1058,11 @@ class _StockScreenState extends State<StockScreen> {
                         totalProfitRate: _totalProfitRate,
                         isWalletLoading: _isWalletLoading,
                       ),
-
                       const SizedBox(height: _gap),
 
                       // 수정98차: 주식시장 상태 표시
                       _buildStockMarketStatusSection(),
-
                       const SizedBox(height: _gap),
-
                       StockHoldingSection(
                         holdingItems: _holdingItems,
                         marketItems: _marketItems,
@@ -1201,7 +1179,7 @@ class _StockScreenState extends State<StockScreen> {
               border: Border.all(color: borderColor),
             ),
             child: Text(
-              '다음 $nextStatus까지 ${remainingMinutes}분',
+              '다음 $nextStatus까지 $remainingMinutes분',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w900,
@@ -1247,157 +1225,200 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  // 수정21차: 화면폭에 따라 주식 화면 2단/1단 자동 전환
   Widget _buildTradingLayout(List<StockItemViewModel> filteredItems) {
-    return Column(
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final tradePanel = StockTradePanelSection(
+      selectedItem: _selectedMarketItem,
+      selectedHolding: _selectedMarketItem == null
+          ? null
+          : _findHoldingByCode(_selectedMarketItem!.code),
+      quantityController: _quantityController,
+      priceController: _priceController,
+      orderPrice: _orderPrice,
+      cash: _cash,
+      availableBuyCash: _availableBuyCash,
+      reservedBuyAmount: _reservedBuyAmount,
+      holdingQuantity: _selectedHoldingQuantity,
+      availableSellQuantity: _availableSellQuantity,
+      reservedSellQuantity: _reservedSellQuantity,
+      isBuyOrder: _isBuyOrder,
+      isMarketOrder: _isMarketOrder,
+      isTrading: _isTrading,
+      onChangeOrderType: (isBuy) {
+        setState(() {
+          _isBuyOrder = isBuy;
+          _quantityController.text = '1';
+        });
+      },
+      onChangeOrderMode: (isMarket) {
+        // 수정100차: 휴장 중 시장가 모드 선택 차단
+        if (isMarket && !_isStockMarketOpen) {
+          _showSnackBar(
+            '휴장 중에는 시장가 주문을 사용할 수 없습니다. 지정가 예약 주문만 가능합니다.',
+          );
+
+          setState(() {
+            _isMarketOrder = false;
+
+            if (_selectedMarketItem != null) {
+              _manualOrderPrice = _selectedMarketItem!.currentPrice;
+              _selectedOrderPrice = _selectedMarketItem!.currentPrice;
+              _priceController.text = _selectedMarketItem!.currentPrice
+                  .toStringAsFixed(0);
+            }
+          });
+
+          return;
+        }
+
+        setState(() {
+          _isMarketOrder = isMarket;
+
+          if (isMarket) {
+            _manualOrderPrice = null;
+            _selectedOrderPrice = null;
+            _priceController.clear();
+          } else if (_selectedMarketItem != null) {
+            _manualOrderPrice = _selectedMarketItem!.currentPrice;
+            _selectedOrderPrice = _selectedMarketItem!.currentPrice;
+            _priceController.text = _selectedMarketItem!.currentPrice
+                .toStringAsFixed(0);
+          }
+        });
+      },
+      onDecreaseQuantity: _decreaseQuantity,
+      onIncreaseQuantity: _increaseQuantity,
+      onSetMaxQuantity: _setMaxQuantity,
+      onBuy: _handleBuy,
+      onSell: _handleSell,
+      onPriceChanged: _handlePriceChanged,
+    );
+
+    final chartSection = StockChartSection(
+      selectedItem: _selectedMarketItem,
+      prices: _selectedStockPrices,
+      isChartLoading: _isChartLoading,
+      lastRealtimeUpdatedAt: _lastRealtimeUpdatedAt,
+      selectedRange: _selectedChartRange,
+      onRangeChanged: (range) {
+        setState(() {
+          _selectedChartRange = range;
+        });
+
+        final item = _selectedMarketItem;
+        if (item != null) {
+          _loadStockChart(item.id, item.name);
+        }
+      },
+    );
+
+    final marketListSection = StockMarketListSection(
+      items: filteredItems,
+      selectedItem: _selectedMarketItem,
+      holdings: _holdingItems,
+      searchController: _searchController,
+      selectedMarketFilter: _selectedMarketFilter,
+      selectedSort: _selectedSort,
+      onMarketChanged: (value) {
+        if (value == null) return;
+        setState(() {
+          _selectedMarketFilter = value;
+        });
+      },
+      onSortChanged: (value) {
+        if (value == null) return;
+        setState(() {
+          _selectedSort = value;
+        });
+      },
+      onSearchChanged: () {
+        setState(() {});
+      },
+      onSelectItem: (item) {
+        setState(() {
+          _selectedMarketItem = item;
+          _selectedOrderPrice = null;
+          _manualOrderPrice = null;
+          _priceController.text = item.currentPrice.toStringAsFixed(0);
+        });
+
+        _loadStockChart(item.id, item.name);
+      },
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+
+        final bool isCompact = width < 1180;
+        final bool isNarrow = width < 820;
+
+        if (isNarrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              marketListSection,
+              const SizedBox(height: _gap),
+              chartSection,
+              const SizedBox(height: _gap),
+              _buildStockInfoTabSection(),
+              const SizedBox(height: _gap),
+              tradePanel,
+              const SizedBox(height: _gap),
+              _buildBottomTradingArea(isCompact: true),
+            ],
+          );
+        }
+
+        if (isCompact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 6, child: chartSection),
+                  const SizedBox(width: _gap),
+                  Expanded(flex: 4, child: marketListSection),
+                ],
+              ),
+              const SizedBox(height: _gap),
+              _buildStockInfoTabSection(),
+              const SizedBox(height: _gap),
+              tradePanel,
+              const SizedBox(height: _gap),
+              _buildBottomTradingArea(isCompact: true),
+            ],
+          );
+        }
+
+        return Column(
           children: [
-            Expanded(
-              flex: 7,
-              child: StockChartSection(
-                selectedItem: _selectedMarketItem,
-                prices: _selectedStockPrices,
-                isChartLoading: _isChartLoading,
-                lastRealtimeUpdatedAt: _lastRealtimeUpdatedAt,
-                selectedRange: _selectedChartRange,
-                onRangeChanged: (range) {
-                  setState(() {
-                    _selectedChartRange = range;
-                  });
-
-                  final item = _selectedMarketItem;
-                  if (item != null) {
-                    _loadStockChart(item.id, item.name);
-                  }
-                },
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 7, child: chartSection),
+                const SizedBox(width: _gap),
+                Expanded(flex: 3, child: marketListSection),
+              ],
             ),
-            const SizedBox(width: _gap),
-            Expanded(
-              flex: 3,
-              child: StockMarketListSection(
-                items: filteredItems,
-                selectedItem: _selectedMarketItem,
-                holdings: _holdingItems,
-                searchController: _searchController,
-                selectedMarketFilter: _selectedMarketFilter,
-                selectedSort: _selectedSort,
-                onMarketChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _selectedMarketFilter = value;
-                  });
-                },
-                onSortChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _selectedSort = value;
-                  });
-                },
-                onSearchChanged: () {
-                  setState(() {});
-                },
-                onSelectItem: (item) {
-                  setState(() {
-                    _selectedMarketItem = item;
-                    _selectedOrderPrice = null;
-                    _manualOrderPrice = null;
-                    _priceController.text = item.currentPrice.toStringAsFixed(
-                      0,
-                    );
-                  });
-
-                  _loadStockChart(item.id, item.name);
-                },
-              ),
+            const SizedBox(height: _gap),
+            _buildStockInfoTabSection(),
+            const SizedBox(height: _gap),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 7,
+                  child: _buildBottomTradingArea(isCompact: false),
+                ),
+                const SizedBox(width: _gap),
+                Expanded(flex: 3, child: tradePanel),
+              ],
             ),
           ],
-        ),
-        const SizedBox(height: _gap),
-
-        // 수정91차: 선택 종목 정보 / 뉴스 / 미체결 / 실시간 체결 통합 탭
-        _buildStockInfoTabSection(),
-
-        const SizedBox(height: _gap),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 7, child: _buildBottomTradingArea()),
-            const SizedBox(width: _gap),
-            Expanded(
-              flex: 3,
-              child: StockTradePanelSection(
-                selectedItem: _selectedMarketItem,
-                selectedHolding: _selectedMarketItem == null
-                    ? null
-                    : _findHoldingByCode(_selectedMarketItem!.code),
-                quantityController: _quantityController,
-                priceController: _priceController,
-                orderPrice: _orderPrice,
-                cash: _cash,
-                availableBuyCash: _availableBuyCash,
-                reservedBuyAmount: _reservedBuyAmount,
-                holdingQuantity: _selectedHoldingQuantity,
-                availableSellQuantity: _availableSellQuantity,
-                reservedSellQuantity: _reservedSellQuantity,
-                isBuyOrder: _isBuyOrder,
-                isMarketOrder: _isMarketOrder,
-                isTrading: _isTrading,
-                onChangeOrderType: (isBuy) {
-                  setState(() {
-                    _isBuyOrder = isBuy;
-                    _quantityController.text = '1';
-                  });
-                },
-                onChangeOrderMode: (isMarket) {
-                  // 수정100차: 휴장 중 시장가 모드 선택 차단
-                  if (isMarket && !_isStockMarketOpen) {
-                    _showSnackBar(
-                      '휴장 중에는 시장가 주문을 사용할 수 없습니다. 지정가 예약 주문만 가능합니다.',
-                    );
-
-                    setState(() {
-                      _isMarketOrder = false;
-
-                      if (_selectedMarketItem != null) {
-                        _manualOrderPrice = _selectedMarketItem!.currentPrice;
-                        _selectedOrderPrice = _selectedMarketItem!.currentPrice;
-                        _priceController.text = _selectedMarketItem!
-                            .currentPrice
-                            .toStringAsFixed(0);
-                      }
-                    });
-
-                    return;
-                  }
-
-                  setState(() {
-                    _isMarketOrder = isMarket;
-
-                    if (isMarket) {
-                      _manualOrderPrice = null;
-                      _selectedOrderPrice = null;
-                      _priceController.clear();
-                    } else if (_selectedMarketItem != null) {
-                      _manualOrderPrice = _selectedMarketItem!.currentPrice;
-                      _selectedOrderPrice = _selectedMarketItem!.currentPrice;
-                      _priceController.text = _selectedMarketItem!.currentPrice
-                          .toStringAsFixed(0);
-                    }
-                  });
-                },
-                onDecreaseQuantity: _decreaseQuantity,
-                onIncreaseQuantity: _increaseQuantity,
-                onSetMaxQuantity: _setMaxQuantity,
-                onBuy: _handleBuy,
-                onSell: _handleSell,
-                onPriceChanged: _handlePriceChanged,
-              ),
-            ),
-          ],
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -1650,7 +1671,7 @@ class _StockScreenState extends State<StockScreen> {
     return ListView.separated(
       physics: const ClampingScrollPhysics(),
       itemCount: _recentNewsItems.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         return _buildMarketNewsItem(_recentNewsItems[index]);
       },
@@ -1873,7 +1894,7 @@ class _StockScreenState extends State<StockScreen> {
         : DateTime.tryParse(news['active_until'].toString())?.toLocal();
 
     final double remainingImpactRate =
-        ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
+    ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
 
     if (remainingImpactRate.abs() <= 0.001) {
       return '반영완료';
@@ -1911,7 +1932,7 @@ class _StockScreenState extends State<StockScreen> {
 
   String _newsRemainingLabel(Map<String, dynamic> news) {
     final double remainingImpactRate =
-        ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
+    ((news['remaining_impact_rate'] ?? 0) as num).toDouble();
 
     if (remainingImpactRate.abs() <= 0.001) {
       return '0.00%';
@@ -2166,40 +2187,52 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
-  Widget _buildBottomTradingArea() {
+  // 수정21차: 호가/최근 체결내역도 화면폭에 따라 자동 세로 배치
+  Widget _buildBottomTradingArea({required bool isCompact}) {
+    final orderBookSection = StockOrderBookSection(
+      selectedItem: _selectedMarketItem,
+      selectedOrderPrice: _selectedOrderPrice,
+      onSelectPrice: (price) {
+        setState(() {
+          _selectedOrderPrice = price;
+          _manualOrderPrice = price;
+          _priceController.text = price.toStringAsFixed(0);
+          _isMarketOrder = false;
+        });
+      },
+    );
+
+    final tradeHistorySection = ClipRect(
+      child: StockTradeHistorySection(
+        tradeHistoryItems: _tradeHistoryItems,
+        tradeHistoryPage: _tradeHistoryPage,
+        tradeHistoryPageSize: _tradeHistoryPageSize,
+        isLoggedIn: _isLoggedIn,
+        onPageChanged: (page) {
+          setState(() {
+            _tradeHistoryPage = page;
+          });
+        },
+      ),
+    );
+
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          orderBookSection,
+          const SizedBox(height: _gap),
+          tradeHistorySection,
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          flex: 45,
-          child: StockOrderBookSection(
-            selectedItem: _selectedMarketItem,
-            selectedOrderPrice: _selectedOrderPrice,
-            onSelectPrice: (price) {
-              setState(() {
-                _selectedOrderPrice = price;
-                _manualOrderPrice = price;
-                _priceController.text = price.toStringAsFixed(0);
-                _isMarketOrder = false;
-              });
-            },
-          ),
-        ),
+        Expanded(flex: 45, child: orderBookSection),
         const SizedBox(width: _gap),
-        Expanded(
-          flex: 55,
-          child: StockTradeHistorySection(
-            tradeHistoryItems: _tradeHistoryItems,
-            tradeHistoryPage: _tradeHistoryPage,
-            tradeHistoryPageSize: _tradeHistoryPageSize,
-            isLoggedIn: _isLoggedIn,
-            onPageChanged: (page) {
-              setState(() {
-                _tradeHistoryPage = page;
-              });
-            },
-          ),
-        ),
+        Expanded(flex: 55, child: tradeHistorySection),
       ],
     );
   }

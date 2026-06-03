@@ -181,9 +181,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
 
       setState(() {
         _isIdAvailable = result;
-        _idStatusMessage = result
-            ? '사용 가능한 ID입니다.'
-            : '이미 사용 중인 ID입니다.';
+        _idStatusMessage = result ? '사용 가능한 ID입니다.' : '이미 사용 중인 ID입니다.';
       });
     } catch (_) {
       if (!mounted) return;
@@ -193,11 +191,11 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
         _idStatusMessage = 'ID 중복확인 중 오류가 발생했습니다.';
       });
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isCheckingId = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isCheckingId = false;
+        });
+      }
     }
   }
 
@@ -227,9 +225,7 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
 
       setState(() {
         _isEmailAvailable = result;
-        _emailStatusMessage = result
-            ? '사용 가능한 이메일입니다.'
-            : '이미 사용 중인 이메일입니다.';
+        _emailStatusMessage = result ? '사용 가능한 이메일입니다.' : '이미 사용 중인 이메일입니다.';
         widget.emailController.text = email;
       });
     } catch (_) {
@@ -240,11 +236,11 @@ class _RegisterViewSectionState extends State<RegisterViewSection> {
         _emailStatusMessage = '이메일 중복확인 중 오류가 발생했습니다.';
       });
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isCheckingEmail = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isCheckingEmail = false;
+        });
+      }
     }
   }
 

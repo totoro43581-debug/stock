@@ -46,7 +46,7 @@ class StockBuyService {
         quantity: quantity,
       );
 
-      return '시장가 매수 완료: ${item.name} ${quantity}주';
+      return '시장가 매수 완료: ${item.name} $quantity주';
     }
 
     // 수정76차: 지정가 주문가가 현재가와 같으면 즉시 체결
@@ -61,7 +61,7 @@ class StockBuyService {
         quantity: quantity,
       );
 
-      return '지정가 매수 체결: ${item.name} ${quantity}주';
+      return '지정가 매수 체결: ${item.name} $quantity주';
     }
 
     final hasSameOrder = _pendingOrderService.hasSamePendingOrder(
@@ -84,6 +84,6 @@ class StockBuyService {
       quantity: quantity,
     );
 
-    return '지정가 매수 주문 등록: ${item.name} ${quantity}주';
+    return '지정가 매수 주문 등록: ${item.name} $quantity주';
   }
 }

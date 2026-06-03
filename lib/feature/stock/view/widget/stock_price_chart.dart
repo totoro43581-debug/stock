@@ -1,7 +1,7 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:stock/feature/stock/model/stock_candle_model.dart';
 
 class StockPriceChart extends StatefulWidget {
@@ -109,9 +109,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
 
     final diff = last - first;
 
-    final rate = first == 0
-        ? 0
-        : (diff / first) * 100;
+    final rate = first == 0 ? 0 : (diff / first) * 100;
     final isUp = diff >= 0;
 
     return Container(
@@ -157,9 +155,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
           const SizedBox(height: 10),
 
           // 수정28차: 이동평균선 범례
@@ -208,7 +204,7 @@ class _StockPriceChartState extends State<StockPriceChart> {
                     _hoverPosition = event.localPosition;
                   });
                 },
-                onExit: (_) {
+                onExit: (event) {
                   setState(() {
                     _hoverPosition = null;
                   });
@@ -416,8 +412,8 @@ class _CandleChartPainter extends CustomPainter {
 
       final isUp = candle.close >= candle.open;
       final color = isUp
-          ? const Color(0xFFDC2626).withOpacity(0.28)
-          : const Color(0xFF2563EB).withOpacity(0.28);
+          ? const Color(0xFFDC2626).withValues(alpha: 0.28)
+          : const Color(0xFF2563EB).withValues(alpha: 0.28);
 
       final volumeRatio = candle.volume / safeMaxVolume;
       final barHeight = max(1.0, volumeHeight * volumeRatio);
@@ -556,7 +552,7 @@ class _CandleChartPainter extends CustomPainter {
       canvas.drawRRect(
         highlightRect,
         Paint()
-          ..color = candleColor.withOpacity(0.55)
+          ..color = candleColor.withValues(alpha: 0.55)
           ..style = PaintingStyle.fill,
       );
 
@@ -777,6 +773,7 @@ class _CandleChartPainter extends CustomPainter {
   String _formatDate(DateTime value) {
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
+
     return '$month/$day';
   }
 
