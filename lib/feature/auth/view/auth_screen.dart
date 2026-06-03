@@ -4,7 +4,6 @@ import 'package:stock/feature/auth/view/widget/login_card_section.dart';
 import 'package:stock/feature/auth/view/widget/register_view_section.dart';
 import 'package:stock/feature/quest/service/daily_quest_service.dart';
 
-
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -148,7 +147,7 @@ class _AuthScreenState extends State<AuthScreen> {
       String message = e.message;
 
       // 수정4차: contains로 변경 (핵심)
-      if (e.message.toLowerCase().contains('Invalid login credentials')) {
+      if (e.message.toLowerCase().contains('invalid login credentials')) {
         message = '아이디 또는 비밀번호가 다릅니다.';
       }
 
@@ -157,14 +156,16 @@ class _AuthScreenState extends State<AuthScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -253,6 +254,7 @@ class _AuthScreenState extends State<AuthScreen> {
       );
     } on AuthException catch (e) {
       if (!mounted) return;
+
       setState(() {
         _errorMessage = e.message;
       });
@@ -276,14 +278,16 @@ class _AuthScreenState extends State<AuthScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

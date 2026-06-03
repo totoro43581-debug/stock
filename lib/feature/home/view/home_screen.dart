@@ -2,20 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/asset_account/repository/asset_account_repository.dart';
 import 'package:stock/feature/bank/view/bank_screen.dart';
 import 'package:stock/feature/stock/view/stock_screen.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
+import 'package:stock/feature/coin/view/coin_screen.dart';
 
-import 'package:stock/feature/asset_account/repository/asset_account_repository.dart';
-
+import '../../auth/view/widget/login_card_section.dart';
+import '../../auth/view/widget/register_view_section.dart';
 import 'widget/bottom_notice_section.dart';
 import 'widget/category_grid_section.dart';
 import 'widget/feature_section.dart';
 import 'widget/hero_section.dart';
-import '../../auth/view/widget/login_card_section.dart';
 import 'widget/my_asset_card_section.dart';
-import '../../auth/view/widget/register_view_section.dart';
 import 'widget/top_header_section.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -58,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // 수정1차: 기존 로그인 세션이 남아 있는 경우 기본 자산계좌 보장
     if (_supabase.auth.currentSession != null) {
       _ensureUserAssetAccounts();
     }
@@ -68,7 +68,6 @@ class _HomeScreenState extends State<HomeScreen> {
           if (!mounted) return;
 
           if (data.session != null) {
-            // 수정1차: 로그인 상태 진입 시 기본 자산계좌 3개 보장
             _ensureUserAssetAccounts();
           }
 
@@ -96,7 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // 수정1차: 은행계좌 / 주식계좌 / 코인계좌 자동 생성 보장
   Future<void> _ensureUserAssetAccounts() async {
     try {
       await _assetAccountRepository.ensureUserAssetAccounts();
@@ -159,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 수정83차: 로그인 전 profiles 직접 조회 제거 → RPC로 이메일 조회
   Future<String?> _findEmailByLoginId(String loginId) async {
     final String trimmedId = loginId.trim();
 
@@ -203,8 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('존재하지 않는 아이디입니다.');
       }
 
-      final AuthResponse authResponse =
-      await _supabase.auth.signInWithPassword(
+      final AuthResponse authResponse = await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
@@ -215,10 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('로그인 사용자 정보를 가져오지 못했습니다.');
       }
 
-      // 수정8차: 로그인 직후 wallet 자동 생성 보장
       await WalletRepository().ensureWallet(user.id);
-
-      // 수정1차: 로그인 직후 기본 자산계좌 3개 자동 생성 보장
       await _assetAccountRepository.ensureUserAssetAccounts();
 
       if (!mounted) return;
@@ -256,11 +249,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -379,11 +372,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -401,7 +394,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final User? user = _supabase.auth.currentUser;
 
     final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isWide = screenWidth >= 1100;
+
+    final bool isDesktop = screenWidth >= 1180;
+    final bool isTablet = screenWidth >= 760 && screenWidth < 1180;
+    final bool isMobile = screenWidth < 760;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F5F9),
@@ -432,7 +428,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 : _buildMainContent(
               session: session,
               user: user,
-              isWide: isWide,
+              isDesktop: isDesktop,
+              isTablet: isTablet,
+              isMobile: isMobile,
             ),
           ),
         ],
@@ -443,7 +441,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMainContent({
     required Session? session,
     required User? user,
-    required bool isWide,
+    required bool isDesktop,
+    required bool isTablet,
+    required bool isMobile,
   }) {
     switch (_selectedMenu) {
       case 'stock':
@@ -452,11 +452,17 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'saving':
         return const BankScreen();
 
+      case 'coin':
+        return const CoinScreen();
+
       case 'real_estate':
         return _buildPreparingContent('부동산');
 
       case 'report':
         return _buildPreparingContent('리포트');
+
+      case 'board':
+        return _buildPreparingContent('자유게시판');
 
       case 'asset':
         return _buildPreparingContent('자산현황');
@@ -466,7 +472,9 @@ class _HomeScreenState extends State<HomeScreen> {
         return _buildHomeContent(
           session: session,
           user: user,
-          isWide: isWide,
+          isDesktop: isDesktop,
+          isTablet: isTablet,
+          isMobile: isMobile,
         );
     }
   }
@@ -474,85 +482,81 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHomeContent({
     required Session? session,
     required User? user,
-    required bool isWide,
+    required bool isDesktop,
+    required bool isTablet,
+    required bool isMobile,
   }) {
+    final double horizontalPadding = isMobile
+        ? 12
+        : isTablet
+        ? 18
+        : 24;
+
+    final double verticalPadding = isMobile ? 12 : 24;
+    final double sectionGap = isMobile ? 14 : 20;
+
+    final Widget authOrAssetSection = session == null
+        ? LoginCardSection(
+      idController: _loginIdController,
+      passwordController: _loginPasswordController,
+      errorMessage: _errorMessage,
+      isLoading: _isLoading,
+      onTapLogin: _handleLogin,
+      onTapRegister: _openRegisterView,
+    )
+        : MyAssetCardSection(
+      user: user,
+    );
+
     return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1400),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 24,
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: verticalPadding,
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (isWide)
-                  SizedBox(
-                    height: 342,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          flex: 7,
-                          child: HeroSection(
-                            user: user,
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          flex: 3,
-                          child: session == null
-                              ? LoginCardSection(
-                            idController: _loginIdController,
-                            passwordController:
-                            _loginPasswordController,
-                            errorMessage: _errorMessage,
-                            isLoading: _isLoading,
-                            onTapLogin: _handleLogin,
-                            onTapRegister: _openRegisterView,
-                          )
-                              : MyAssetCardSection(
-                            user: user,
-                          ),
-                        ),
-                      ],
-                    ),
+                if (isDesktop)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 7,
+                        child: HeroSection(user: user),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        flex: 3,
+                        child: authOrAssetSection,
+                      ),
+                    ],
                   )
                 else
                   Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       HeroSection(user: user),
-                      const SizedBox(height: 20),
-                      session == null
-                          ? LoginCardSection(
-                        idController: _loginIdController,
-                        passwordController:
-                        _loginPasswordController,
-                        errorMessage: _errorMessage,
-                        isLoading: _isLoading,
-                        onTapLogin: _handleLogin,
-                        onTapRegister: _openRegisterView,
-                      )
-                          : MyAssetCardSection(
-                        user: user,
-                      ),
+                      SizedBox(height: sectionGap),
+                      authOrAssetSection,
                     ],
                   ),
-                const SizedBox(height: 20),
+                SizedBox(height: sectionGap),
                 CategoryGridSection(
-                  onTapStock: () => _handleMenuSelected('stock'),
-                  onTapEtf: () => _handleMenuSelected('etf'),
                   onTapSaving: () => _handleMenuSelected('saving'),
-                  onTapRealEstate: () =>
-                      _handleMenuSelected('real_estate'),
+                  onTapStock: () => _handleMenuSelected('stock'),
+                  onTapCoin: () => _handleMenuSelected('coin'),
+                  onTapRealEstate: () => _handleMenuSelected('real_estate'),
                   onTapReport: () => _handleMenuSelected('report'),
-                  onTapAsset: () => _handleMenuSelected('asset'),
+                  onTapBoard: () => _handleMenuSelected('board'),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: sectionGap),
                 const FeatureSection(),
-                const SizedBox(height: 20),
+                SizedBox(height: sectionGap),
                 const BottomNoticeSection(),
               ],
             ),
@@ -568,51 +572,54 @@ class _HomeScreenState extends State<HomeScreen> {
       height: double.infinity,
       color: const Color(0xFFF3F5F9),
       child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Container(
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0D000000),
-                  blurRadius: 16,
-                  offset: Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.construction_rounded,
-                  size: 42,
-                  color: Color(0xFF2563EB),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '$title 화면 준비중',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF111827),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D000000),
+                    blurRadius: 16,
+                    offset: Offset(0, 8),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '$title 화면은 상단 메뉴와 홈 카드 버튼에서 동일하게 연결되도록 준비 중입니다.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.6,
-                    color: Color(0xFF6B7280),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.construction_rounded,
+                    size: 42,
+                    color: Color(0xFF2563EB),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Text(
+                    '$title 화면 준비중',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '$title 화면은 상단 메뉴와 홈 카드 버튼에서 동일하게 연결되도록 준비 중입니다.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

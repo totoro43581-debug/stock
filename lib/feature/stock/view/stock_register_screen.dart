@@ -80,12 +80,14 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
       _showMessage('종목이 등록되었습니다.');
     } catch (e) {
       if (!mounted) return;
+
       _showMessage('종목 등록 실패: $e');
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isSaving = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
@@ -161,7 +163,6 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   TextField(
                     controller: _codeController,
                     decoration: _inputDecoration(
@@ -170,7 +171,6 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   TextField(
                     controller: _nameController,
                     decoration: _inputDecoration(
@@ -179,9 +179,8 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   DropdownButtonFormField<String>(
-                    value: _selectedMarket,
+                    initialValue: _selectedMarket,
                     items: _marketItems
                         .map(
                           (market) => DropdownMenuItem<String>(
@@ -192,6 +191,7 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
                         .toList(),
                     onChanged: (value) {
                       if (value == null) return;
+
                       setState(() {
                         _selectedMarket = value;
                       });
@@ -202,7 +202,6 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   TextField(
                     controller: _priceController,
                     keyboardType: TextInputType.number,
@@ -212,7 +211,6 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text(
@@ -237,9 +235,7 @@ class _StockRegisterScreenState extends State<StockRegisterScreen> {
                       });
                     },
                   ),
-
                   const SizedBox(height: 24),
-
                   SizedBox(
                     width: double.infinity,
                     height: 52,

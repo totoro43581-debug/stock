@@ -1,37 +1,131 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-class StockAssetAccountScreen extends StatelessWidget {
+import 'package:stock/feature/asset_account/repository/asset_account_repository.dart';
+import 'package:stock/feature/asset_account/view/widget/asset_transaction_list_widget.dart';
+
+class StockAssetAccountScreen extends StatefulWidget {
   const StockAssetAccountScreen({super.key});
 
   @override
+  State<StockAssetAccountScreen> createState() =>
+      _StockAssetAccountScreenState();
+}
+
+class _StockAssetAccountScreenState extends State<StockAssetAccountScreen> {
+  final AssetAccountRepository _assetAccountRepository =
+  AssetAccountRepository();
+
+  final NumberFormat _moneyFormat = NumberFormat('#,###');
+
+  bool _isLoading = true;
+
+  double _stockCashBalance = 0;
+  List<Map<String, dynamic>> _stockTransactions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStockAssetAccountData();
+  }
+
+  Future<void> _loadStockAssetAccountData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _assetAccountRepository.ensureUserAssetAccounts();
+
+      final results = await Future.wait([
+        _assetAccountRepository.fetchAccountCashBalance(
+          accountType: 'stock',
+        ),
+        _assetAccountRepository.fetchAssetAccountTransactions(
+          reasons: const [
+            'asset_to_stock',
+            'stock_to_asset',
+            'stock_buy',
+            'stock_sell',
+          ],
+          limit: 20,
+        ),
+      ]);
+
+      if (!mounted) return;
+
+      setState(() {
+        _stockCashBalance = results[0] as double;
+        _stockTransactions = results[1] as List<Map<String, dynamic>>;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final bool isCompact = MediaQuery.of(context).size.width < 760;
+
     return Container(
       color: const Color(0xFFF8FAFC),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _buildAssetSummaryCard(),
-            const SizedBox(height: 14),
-            _buildAccountFlowCard(),
-            const SizedBox(height: 14),
-            _buildDepositSavingCard(),
-          ],
+      child: RefreshIndicator(
+        onRefresh: _loadStockAssetAccountData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isCompact ? 10 : 16),
+          child: Column(
+            children: [
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 80),
+                  child: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else ...[
+                _buildAssetSummaryCard(isCompact: isCompact),
+                const SizedBox(height: 14),
+                _buildAccountFlowCard(isCompact: isCompact),
+                const SizedBox(height: 14),
+                AssetTransactionListWidget(
+                  title: '주식 계좌 거래내역',
+                  transactions: _stockTransactions,
+                ),
+                const SizedBox(height: 14),
+                _buildDepositSavingCard(),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildAssetSummaryCard() {
+  Widget _buildAssetSummaryCard({
+    required bool isCompact,
+  }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(isCompact ? 14 : 18),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '자산계좌',
+            '주식 자산계좌',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
@@ -40,7 +134,7 @@ class StockAssetAccountScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            '현금, 주식 평가금, 예금, 적금을 한 곳에서 관리합니다.',
+            '주식 투자용 현금, 매수/매도 거래내역을 관리합니다.',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -48,38 +142,54 @@ class StockAssetAccountScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryBox(
-                  title: '보유 현금',
-                  amount: '2,000,000원',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildSummaryBox(
-                  title: '주식 평가금',
-                  amount: '0원',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildSummaryBox(
-                  title: '예금/적금',
-                  amount: '0원',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildSummaryBox(
-                  title: '총 자산',
-                  amount: '2,000,000원',
+          if (isCompact)
+            Column(
+              children: [
+                _buildSummaryBox(
+                  title: '주식 투자 현금',
+                  amount: '${_formatMoney(_stockCashBalance)}원',
                   isStrong: true,
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(height: 10),
+                _buildSummaryBox(
+                  title: '최근 거래내역',
+                  amount: '${_stockTransactions.length}건',
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSummaryBox(
+                    title: '주식 투자 현금',
+                    amount: '${_formatMoney(_stockCashBalance)}원',
+                    isStrong: true,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildSummaryBox(
+                    title: '최근 거래내역',
+                    amount: '${_stockTransactions.length}건',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildSummaryBox(
+                    title: '주식 평가금',
+                    amount: '추후 연결',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildSummaryBox(
+                    title: '총 주식 자산',
+                    amount: '추후 연결',
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -92,6 +202,7 @@ class StockAssetAccountScreen extends StatelessWidget {
   }) {
     return Container(
       height: 86,
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: isStrong ? const Color(0xFF111827) : const Color(0xFFF9FAFB),
@@ -119,22 +230,25 @@ class StockAssetAccountScreen extends StatelessWidget {
               fontWeight: FontWeight.w900,
               color: isStrong ? Colors.white : const Color(0xFF111827),
             ),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAccountFlowCard() {
+  Widget _buildAccountFlowCard({
+    required bool isCompact,
+  }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(isCompact ? 14 : 18),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '계좌 흐름',
+            '주식 계좌 흐름',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w900,
@@ -142,37 +256,52 @@ class StockAssetAccountScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildFlowButton(
-                  title: '입금',
-                  subtitle: '현금 계좌 증가',
+          if (isCompact)
+            Column(
+              children: [
+                _buildFlowButton(
+                  title: '주식 매수',
+                  subtitle: '주식 투자 현금 감소',
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildFlowButton(
-                  title: '출금',
-                  subtitle: '현금 계좌 감소',
+                const SizedBox(height: 10),
+                _buildFlowButton(
+                  title: '주식 매도',
+                  subtitle: '주식 투자 현금 증가',
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildFlowButton(
-                  title: '예금 가입',
-                  subtitle: '현금 → 예금',
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _buildFlowButton(
+                    title: '주식 매수',
+                    subtitle: '주식 투자 현금 감소',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildFlowButton(
-                  title: '적금 가입',
-                  subtitle: '현금 → 적금',
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildFlowButton(
+                    title: '주식 매도',
+                    subtitle: '주식 투자 현금 증가',
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildFlowButton(
+                    title: '미체결 주문',
+                    subtitle: '예약 주문 관리',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildFlowButton(
+                    title: '체결 내역',
+                    subtitle: '매수/매도 기록',
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -184,6 +313,7 @@ class StockAssetAccountScreen extends StatelessWidget {
   }) {
     return Container(
       height: 74,
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -224,7 +354,7 @@ class StockAssetAccountScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '예금 / 적금 현황',
+            '안내',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w900,
@@ -241,7 +371,7 @@ class StockAssetAccountScreen extends StatelessWidget {
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
             child: const Text(
-              '아직 가입한 예금/적금 상품이 없습니다.',
+              '예금/적금은 은행 탭에서 별도로 관리합니다.',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -267,5 +397,9 @@ class StockAssetAccountScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _formatMoney(double value) {
+    return _moneyFormat.format(value.floor());
   }
 }

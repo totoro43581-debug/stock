@@ -106,7 +106,7 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
                 primary: false,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: widget.items.length,
-                separatorBuilder: (_, __) {
+                separatorBuilder: (context, index) {
                   return const Divider(
                     height: 1,
                     color: Color(0xFFF1F5F9),
@@ -408,7 +408,7 @@ class _StockMarketListSectionState extends State<StockMarketListSection> {
                       if (holdingQty > 0) ...[
                         const SizedBox(width: 8),
                         Text(
-                          '${holdingQty}주',
+                          '$holdingQty주',
                           style: const TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
