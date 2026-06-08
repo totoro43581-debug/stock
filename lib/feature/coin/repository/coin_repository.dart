@@ -2,6 +2,9 @@ import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:stock/core/game_time/game_time_config.dart';
+import 'package:stock/core/game_time/game_time_service.dart';
+
 import '../../asset_account/repository/asset_account_repository.dart';
 import '../model/coin_holding_model.dart';
 import '../model/coin_item_model.dart';
@@ -12,19 +15,24 @@ class CoinRepository {
   final AssetAccountRepository _assetAccountRepository =
   AssetAccountRepository();
 
+  final GameTimeService _gameTimeService = const GameTimeService();
+
   static const double _coinTradeFeeRate = 0.001;
 
   // 수정45차: 소수점 오차 방어 기준
   static const double _quantityEpsilon = 0.00000001;
 
-  // 수정50차: 코인 시세변동 서버 기준 간격
-  static const int _coinMarketTickSeconds = 10;
+  // 수정53차: 코인 시장 변동 기준
+  // 실제 초 단위 타이머가 아니라 게임 시간 기준으로 계산
+  // 코인: 게임 시간 10분마다 1틱 변동
+  static const int _coinMarketTickGameMinutes =
+      GameTimeConfig.coinMarketTickGameMinutes;
 
-  // 수정50차: 장시간 미접속 후 한 번에 과도하게 튀는 것 방지
+  // 수정53차: 장시간 미접속 후 한 번에 과도하게 튀는 것 방지
   static const int _maxCatchUpTickCount = 60;
 
   Future<List<CoinItemModel>> fetchActiveCoins() async {
-    await _simulateCoinMarketTickByElapsedTime();
+    await _simulateCoinMarketTickByElapsedGameTime();
 
     return _fetchActiveCoinsRaw();
   }
@@ -86,19 +94,19 @@ class CoinRepository {
     );
   }
 
-  // 수정50차: 화면이 꺼져 있어도 지난 시간만큼 시세를 따라잡는 구조
-  Future<void> _simulateCoinMarketTickByElapsedTime() async {
-    final DateTime now = DateTime.now().toUtc();
+  // 수정53차: 화면이 꺼져 있어도 지난 게임 시간만큼 시세를 따라잡는 구조
+  Future<void> _simulateCoinMarketTickByElapsedGameTime() async {
+    final DateTime now = _gameTimeService.nowUtc();
 
     final Map<String, dynamic>? state = await _client
-        .from('coin_market_state')
+        .from('market_time_state')
         .select('last_tick_at')
-        .eq('id', 1)
+        .eq('market_type', 'coin')
         .maybeSingle();
 
     if (state == null) {
-      await _client.from('coin_market_state').insert({
-        'id': 1,
+      await _client.from('market_time_state').insert({
+        'market_type': 'coin',
         'last_tick_at': now.toIso8601String(),
         'updated_at': now.toIso8601String(),
       });
@@ -107,40 +115,39 @@ class CoinRepository {
     }
 
     final DateTime lastTickAt =
-        DateTime.tryParse(state['last_tick_at']?.toString() ?? '')
-            ?.toUtc() ??
+        DateTime.tryParse(state['last_tick_at']?.toString() ?? '')?.toUtc() ??
             now;
 
-    final int elapsedSeconds = now.difference(lastTickAt).inSeconds;
+    final int tickCount = _gameTimeService.elapsedMarketTickCount(
+      fromUtc: lastTickAt,
+      toUtc: now,
+      marketGameMinuteInterval: _coinMarketTickGameMinutes,
+      maxTickCount: _maxCatchUpTickCount,
+    );
 
-    if (elapsedSeconds < _coinMarketTickSeconds) {
+    if (tickCount <= 0) {
       return;
     }
-
-    final int rawTickCount = elapsedSeconds ~/ _coinMarketTickSeconds;
-    final int tickCount = rawTickCount > _maxCatchUpTickCount
-        ? _maxCatchUpTickCount
-        : rawTickCount;
 
     for (int i = 0; i < tickCount; i++) {
       await _simulateCoinMarketTickOnce();
     }
 
-    await _client.from('coin_market_state').upsert({
-      'id': 1,
+    await _client.from('market_time_state').upsert({
+      'market_type': 'coin',
       'last_tick_at': now.toIso8601String(),
       'updated_at': now.toIso8601String(),
     });
   }
 
-  // 수정50차: 화면 Timer에서 직접 호출해도 동작하는 강제 1틱 변동
+  // 수정53차: 화면 Timer에서 직접 호출해도 게임시간 상태를 갱신하는 강제 1틱 변동
   Future<void> simulateCoinMarketTick() async {
-    final DateTime now = DateTime.now().toUtc();
+    final DateTime now = _gameTimeService.nowUtc();
 
     await _simulateCoinMarketTickOnce();
 
-    await _client.from('coin_market_state').upsert({
-      'id': 1,
+    await _client.from('market_time_state').upsert({
+      'market_type': 'coin',
       'last_tick_at': now.toIso8601String(),
       'updated_at': now.toIso8601String(),
     });
@@ -186,7 +193,8 @@ class CoinRepository {
 
       // 거래량은 가격 변동과 같이 움직이되 과도하게 튀지 않게 제한
       final double volumeMoveWeight = 0.96 + random.nextDouble() * 0.12;
-      final double volumeSpikeWeight = hasSpike ? 1.05 + random.nextDouble() * 0.12 : 1.0;
+      final double volumeSpikeWeight =
+      hasSpike ? 1.05 + random.nextDouble() * 0.12 : 1.0;
 
       double nextTradeVolume =
           coin.tradeVolume * volumeMoveWeight * volumeSpikeWeight;
