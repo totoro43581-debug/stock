@@ -8,6 +8,7 @@ import 'package:stock/core/game_time/game_time_service.dart';
 import '../../asset_account/repository/asset_account_repository.dart';
 import '../model/coin_holding_model.dart';
 import '../model/coin_item_model.dart';
+import '../model/coin_price_history_model.dart';
 import '../model/coin_trade_history_model.dart';
 
 class CoinRepository {
@@ -18,17 +19,11 @@ class CoinRepository {
   final GameTimeService _gameTimeService = const GameTimeService();
 
   static const double _coinTradeFeeRate = 0.001;
-
-  // 수정45차: 소수점 오차 방어 기준
   static const double _quantityEpsilon = 0.00000001;
 
-  // 수정53차: 코인 시장 변동 기준
-  // 실제 초 단위 타이머가 아니라 게임 시간 기준으로 계산
-  // 코인: 게임 시간 10분마다 1틱 변동
   static const int _coinMarketTickGameMinutes =
       GameTimeConfig.coinMarketTickGameMinutes;
 
-  // 수정53차: 장시간 미접속 후 한 번에 과도하게 튀는 것 방지
   static const int _maxCatchUpTickCount = 60;
 
   Future<List<CoinItemModel>> fetchActiveCoins() async {
@@ -87,14 +82,87 @@ class CoinRepository {
         .toList();
   }
 
-  // 수정37차: 코인 투자 계좌 현금 조회
+  Future<Set<String>> fetchMyFavoriteCoinCodes() async {
+    final User? user = _client.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    final response = await _client
+        .from('coin_favorite')
+        .select('coin_code')
+        .eq('user_id', user.id);
+
+    final List<Map<String, dynamic>> rows =
+    List<Map<String, dynamic>>.from(response);
+
+    return rows
+        .map((row) => row['coin_code']?.toString() ?? '')
+        .where((code) => code.trim().isNotEmpty)
+        .toSet();
+  }
+
+  Future<void> addFavoriteCoin({
+    required CoinItemModel coin,
+  }) async {
+    final User? user = _client.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    await _client.from('coin_favorite').upsert({
+      'user_id': user.id,
+      'coin_code': coin.code,
+      'coin_name': coin.name,
+    });
+  }
+
+  Future<void> removeFavoriteCoin({
+    required String coinCode,
+  }) async {
+    final User? user = _client.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    await _client
+        .from('coin_favorite')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('coin_code', coinCode);
+  }
+
+  Future<List<CoinPriceHistoryModel>> fetchCoinPriceHistory({
+    required String coinCode,
+    int limit = 300,
+  }) async {
+    if (coinCode.trim().isEmpty) {
+      return [];
+    }
+
+    final response = await _client
+        .from('coin_price_history')
+        .select()
+        .eq('coin_code', coinCode)
+        .order('created_at', ascending: false)
+        .limit(limit);
+
+    return List<Map<String, dynamic>>.from(response)
+        .map(CoinPriceHistoryModel.fromMap)
+        .toList()
+        .reversed
+        .toList();
+  }
+
   Future<double> fetchCoinAccountCashBalance() async {
     return _assetAccountRepository.fetchAccountCashBalance(
       accountType: 'coin',
     );
   }
 
-  // 수정53차: 화면이 꺼져 있어도 지난 게임 시간만큼 시세를 따라잡는 구조
   Future<void> _simulateCoinMarketTickByElapsedGameTime() async {
     final DateTime now = _gameTimeService.nowUtc();
 
@@ -140,7 +208,6 @@ class CoinRepository {
     });
   }
 
-  // 수정53차: 화면 Timer에서 직접 호출해도 게임시간 상태를 갱신하는 강제 1틱 변동
   Future<void> simulateCoinMarketTick() async {
     final DateTime now = _gameTimeService.nowUtc();
 
@@ -153,7 +220,6 @@ class CoinRepository {
     });
   }
 
-  // 수정51차: 코인 시세 1틱 변동 안정화
   Future<void> _simulateCoinMarketTickOnce() async {
     final List<CoinItemModel> coins = await _fetchActiveCoinsRaw();
     final Random random = Random();
@@ -162,20 +228,13 @@ class CoinRepository {
       final double volatilityWeight = _coinVolatilityWeight(coin.currentPrice);
 
       final double direction = random.nextDouble() >= 0.5 ? 1 : -1;
-
-      // 기본 변동폭: 0.12% ~ 0.72%
       final double baseMovePercent = 0.12 + random.nextDouble() * 0.6;
-
-      // 급등락 확률: 7%
       final bool hasSpike = random.nextDouble() < 0.07;
-
-      // 급등락 추가 변동폭: 최대 1.2%
       final double spikeMovePercent = hasSpike ? random.nextDouble() * 1.2 : 0;
 
       double movePercent =
           direction * (baseMovePercent + spikeMovePercent) * volatilityWeight;
 
-      // 1틱 최대 변동 제한
       movePercent = movePercent.clamp(-2.2, 2.2).toDouble();
 
       final double moveRate = movePercent / 100;
@@ -191,13 +250,8 @@ class CoinRepository {
       final double nextChangeRate =
       (coin.changeRate + movePercent).clamp(-15.0, 15.0).toDouble();
 
-      // 거래량은 가격 변동과 같이 움직이되 과도하게 튀지 않게 제한
-      final double volumeMoveWeight = 0.96 + random.nextDouble() * 0.12;
-      final double volumeSpikeWeight =
-      hasSpike ? 1.05 + random.nextDouble() * 0.12 : 1.0;
-
       double nextTradeVolume =
-          coin.tradeVolume * volumeMoveWeight * volumeSpikeWeight;
+          coin.tradeVolume * (0.985 + random.nextDouble() * 0.03);
 
       if (nextTradeVolume < 1) {
         nextTradeVolume = 1;
@@ -219,7 +273,6 @@ class CoinRepository {
     }
   }
 
-  // 수정45차: 코인 매수 안정화
   Future<void> buyCoin({
     required CoinItemModel coin,
     required double quantity,
@@ -326,7 +379,6 @@ class CoinRepository {
     );
   }
 
-  // 수정45차: 코인 매도 안정화
   Future<void> sellCoin({
     required CoinItemModel coin,
     required double quantity,
@@ -440,25 +492,11 @@ class CoinRepository {
   }
 
   double _coinVolatilityWeight(double price) {
-    if (price >= 1000000) {
-      return 0.7;
-    }
-
-    if (price >= 100000) {
-      return 0.85;
-    }
-
-    if (price >= 10000) {
-      return 1.0;
-    }
-
-    if (price >= 1000) {
-      return 1.15;
-    }
-
-    if (price >= 100) {
-      return 1.35;
-    }
+    if (price >= 1000000) return 0.7;
+    if (price >= 100000) return 0.85;
+    if (price >= 10000) return 1.0;
+    if (price >= 1000) return 1.15;
+    if (price >= 100) return 1.35;
 
     return 1.6;
   }
@@ -490,6 +528,7 @@ class CoinRepository {
   double _toDouble(dynamic value) {
     if (value == null) return 0;
     if (value is num) return value.toDouble();
+
     return double.tryParse(value.toString()) ?? 0;
   }
 }

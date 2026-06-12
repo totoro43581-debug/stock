@@ -197,7 +197,7 @@ class CoinTopTicker extends StatelessWidget {
         Expanded(
           child: _buildTickerStatBox(
             label: '거래대금',
-            value: compactMoney(tradeAmount),
+            value: _formatTradeAmount(tradeAmount),
             valueColor: const Color(0xFF111827),
           ),
         ),
@@ -245,6 +245,40 @@ class CoinTopTicker extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatTradeAmount(double value) {
+    if (value >= 10000000000000000) {
+      final double gyeong = value / 10000000000000000;
+      return '${_trimDecimal(gyeong, 1)}경';
+    }
+
+    if (value >= 1000000000000) {
+      final double jo = value / 1000000000000;
+      return '${_trimDecimal(jo, 1)}조';
+    }
+
+    if (value >= 100000000) {
+      final double eok = value / 100000000;
+      return '${_trimDecimal(eok, 1)}억';
+    }
+
+    if (value >= 10000) {
+      final double man = value / 10000;
+      return '${_trimDecimal(man, 1)}만';
+    }
+
+    return moneyFormat.format(value.round());
+  }
+
+  String _trimDecimal(double value, int fractionDigits) {
+    final String text = value.toStringAsFixed(fractionDigits);
+
+    if (text.endsWith('.0')) {
+      return text.substring(0, text.length - 2);
+    }
+
+    return text;
   }
 
   BoxDecoration _exchangePanelDecoration() {

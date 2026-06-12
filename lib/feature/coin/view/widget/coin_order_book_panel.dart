@@ -116,11 +116,11 @@ class CoinOrderBookPanel extends StatelessWidget {
         children: [
           _buildSummaryText(
             label: '거래량',
-            value: '${formatQuantity(coin.tradeVolume)} ${coin.symbol}',
+            value: '${_formatOrderQuantity(coin.tradeVolume)} ${coin.symbol}',
           ),
           _buildSummaryText(
             label: '거래대금',
-            value: compactMoney(tradeAmount),
+            value: _formatTradeAmount(tradeAmount),
           ),
           _buildSummaryText(
             label: '고가',
@@ -331,80 +331,134 @@ class CoinOrderBookPanel extends StatelessWidget {
     final Color priceColor = row.isAsk ? _red : _blue;
     final Color barColor = row.isAsk ? _askBg : _bidBg;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(
-              bottom: BorderSide(color: _lineColor),
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: _lineColor),
+        ),
+      ),
+      child: Stack(
+        children: [
+          Align(
+            alignment: row.isAsk ? Alignment.centerLeft : Alignment.centerRight,
+            child: FractionallySizedBox(
+              widthFactor: ratio,
+              heightFactor: 1,
+              child: ColoredBox(color: barColor),
             ),
           ),
-          child: Stack(
-            children: [
-              Align(
-                alignment: row.isAsk
-                    ? Alignment.centerLeft
-                    : Alignment.centerRight,
-                child: FractionallySizedBox(
-                  widthFactor: ratio,
-                  heightFactor: 1,
-                  child: ColoredBox(color: barColor),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    row.isAsk ? _formatOrderQuantity(row.quantity) : '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: _textMid,
+                    ),
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        row.isAsk ? formatQuantity(row.quantity) : '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: _textMid,
-                        ),
-                      ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    moneyFormat.format(row.price),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: priceColor,
                     ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        moneyFormat.format(row.price),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          color: priceColor,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        row.isAsk ? '' : formatQuantity(row.quantity),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: _textMid,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    row.isAsk ? '' : _formatOrderQuantity(row.quantity),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: _textMid,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  String _formatOrderQuantity(double value) {
+    if (value >= 100000000) {
+      final double eok = value / 100000000;
+      return '${_trimDecimal(eok, 1)}억';
+    }
+
+    if (value >= 10000) {
+      final double man = value / 10000;
+      return '${_trimDecimal(man, 1)}만';
+    }
+
+    if (value >= 1000) {
+      return moneyFormat.format(value.round());
+    }
+
+    if (value >= 100) {
+      return value.toStringAsFixed(1);
+    }
+
+    if (value >= 1) {
+      return value.toStringAsFixed(2);
+    }
+
+    return value.toStringAsFixed(6);
+  }
+
+  String _formatTradeAmount(double value) {
+    if (value >= 10000000000000000) {
+      final double gyeong = value / 10000000000000000;
+      return '${_trimDecimal(gyeong, 1)}경';
+    }
+
+    if (value >= 1000000000000) {
+      final double jo = value / 1000000000000;
+      return '${_trimDecimal(jo, 1)}조';
+    }
+
+    if (value >= 100000000) {
+      final double eok = value / 100000000;
+      return '${_trimDecimal(eok, 1)}억';
+    }
+
+    if (value >= 10000) {
+      final double man = value / 10000;
+      return '${_trimDecimal(man, 1)}만';
+    }
+
+    return moneyFormat.format(value.round());
+  }
+
+  String _trimDecimal(double value, int fractionDigits) {
+    final String text = value.toStringAsFixed(fractionDigits);
+
+    if (text.endsWith('.0')) {
+      return text.substring(0, text.length - 2);
+    }
+
+    return text;
   }
 
   Widget _buildEmptyText(String text) {

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:stock/feature/coin/model/coin_holding_model.dart';
 import 'package:stock/feature/coin/model/coin_item_model.dart';
+import 'package:stock/feature/coin/model/coin_price_history_model.dart';
 import 'package:stock/feature/coin/model/coin_trade_history_model.dart';
 import 'package:stock/feature/coin/repository/coin_repository.dart';
 import 'package:stock/feature/coin/view/widget/coin_bottom_tab_panel.dart';
@@ -40,6 +41,8 @@ class _CoinScreenState extends State<CoinScreen> {
   List<CoinItemModel> _coins = [];
   List<CoinHoldingModel> _holdings = [];
   List<CoinTradeHistoryModel> _tradeHistories = [];
+  List<CoinPriceHistoryModel> _priceHistories = [];
+  Set<String> _favoriteCoinCodes = {};
 
   CoinItemModel? _selectedCoin;
 
@@ -66,12 +69,12 @@ class _CoinScreenState extends State<CoinScreen> {
         if (!mounted) return;
         if (_isMarketRefreshing) return;
 
-        await _simulateCoinMarketTick();
+        await _refreshCoinMarketData();
       },
     );
   }
 
-  Future<void> _simulateCoinMarketTick() async {
+  Future<void> _refreshCoinMarketData() async {
     if (_isMarketRefreshing || _isProcessing) return;
 
     setState(() {
@@ -79,10 +82,9 @@ class _CoinScreenState extends State<CoinScreen> {
     });
 
     try {
-      await _repository.simulateCoinMarketTick();
       await _loadCoinData(showLoading: false);
     } catch (e) {
-      debugPrint('코인 시세 자동 갱신 실패: $e');
+      debugPrint('코인 화면 갱신 실패: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -105,12 +107,35 @@ class _CoinScreenState extends State<CoinScreen> {
         _repository.fetchMyCoinHoldings(),
         _repository.fetchMyCoinTradeHistory(),
         _repository.fetchCoinAccountCashBalance(),
+        _repository.fetchMyFavoriteCoinCodes(),
       ]);
 
       final coins = results[0] as List<CoinItemModel>;
       final holdings = results[1] as List<CoinHoldingModel>;
       final histories = results[2] as List<CoinTradeHistoryModel>;
       final coinAccountCash = results[3] as double;
+      final favoriteCoinCodes = results[4] as Set<String>;
+
+      CoinItemModel? nextSelectedCoin = _selectedCoin;
+
+      if (nextSelectedCoin == null && coins.isNotEmpty) {
+        nextSelectedCoin = coins.first;
+      } else if (nextSelectedCoin != null) {
+        for (final coin in coins) {
+          if (coin.code == nextSelectedCoin!.code) {
+            nextSelectedCoin = coin;
+            break;
+          }
+        }
+      }
+
+      final List<CoinPriceHistoryModel> priceHistories =
+      nextSelectedCoin == null
+          ? []
+          : await _repository.fetchCoinPriceHistory(
+        coinCode: nextSelectedCoin.code,
+        limit: 300,
+      );
 
       if (!mounted) return;
 
@@ -119,17 +144,9 @@ class _CoinScreenState extends State<CoinScreen> {
         _holdings = holdings;
         _tradeHistories = histories;
         _coinAccountCash = coinAccountCash;
-
-        if (_selectedCoin == null && coins.isNotEmpty) {
-          _selectedCoin = coins.first;
-        } else if (_selectedCoin != null) {
-          for (final coin in coins) {
-            if (coin.code == _selectedCoin!.code) {
-              _selectedCoin = coin;
-              break;
-            }
-          }
-        }
+        _selectedCoin = nextSelectedCoin;
+        _priceHistories = priceHistories;
+        _favoriteCoinCodes = favoriteCoinCodes;
       });
     } catch (e) {
       if (!mounted) return;
@@ -267,6 +284,10 @@ class _CoinScreenState extends State<CoinScreen> {
     return holding?.quantity ?? 0;
   }
 
+  Set<String> get _holdingCoinCodes {
+    return _holdings.map((holding) => holding.coinCode).toSet();
+  }
+
   bool get _canSubmitOrder {
     final CoinItemModel? coin = _selectedCoin;
 
@@ -364,10 +385,64 @@ class _CoinScreenState extends State<CoinScreen> {
     });
   }
 
-  void _selectCoin(CoinItemModel coin) {
+  Future<void> _selectCoin(CoinItemModel coin) async {
     setState(() {
       _selectedCoin = coin;
+      _priceHistories = [];
     });
+
+    try {
+      final histories = await _repository.fetchCoinPriceHistory(
+        coinCode: coin.code,
+        limit: 300,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _priceHistories = histories;
+      });
+    } catch (e) {
+      debugPrint('코인 차트 이력 조회 실패: $e');
+    }
+  }
+
+  Future<void> _toggleFavoriteCoin(CoinItemModel coin) async {
+    final bool isFavorite = _favoriteCoinCodes.contains(coin.code);
+
+    setState(() {
+      if (isFavorite) {
+        _favoriteCoinCodes.remove(coin.code);
+      } else {
+        _favoriteCoinCodes.add(coin.code);
+      }
+    });
+
+    try {
+      if (isFavorite) {
+        await _repository.removeFavoriteCoin(
+          coinCode: coin.code,
+        );
+      } else {
+        await _repository.addFavoriteCoin(
+          coin: coin,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        if (isFavorite) {
+          _favoriteCoinCodes.add(coin.code);
+        } else {
+          _favoriteCoinCodes.remove(coin.code);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
   void _changeBottomTab(String tab) {
@@ -467,6 +542,7 @@ class _CoinScreenState extends State<CoinScreen> {
                     height: chartHeight,
                     child: CoinChartPanel(
                       coin: _selectedCoin,
+                      priceHistories: _priceHistories,
                     ),
                   ),
                   const SizedBox(height: gap),
@@ -522,9 +598,12 @@ class _CoinScreenState extends State<CoinScreen> {
                 height: marketHeight,
                 coins: _coins,
                 selectedCoin: _selectedCoin,
+                holdingCoinCodes: _holdingCoinCodes,
+                favoriteCoinCodes: _favoriteCoinCodes,
                 moneyFormat: _moneyFormat,
                 compactMoney: _compactMoney,
                 onCoinSelected: _selectCoin,
+                onFavoriteToggle: _toggleFavoriteCoin,
               ),
             ),
           ],
@@ -565,15 +644,19 @@ class _CoinScreenState extends State<CoinScreen> {
           height: isMobile ? 360 : 420,
           coins: _coins,
           selectedCoin: _selectedCoin,
+          holdingCoinCodes: _holdingCoinCodes,
+          favoriteCoinCodes: _favoriteCoinCodes,
           moneyFormat: _moneyFormat,
           compactMoney: _compactMoney,
           onCoinSelected: _selectCoin,
+          onFavoriteToggle: _toggleFavoriteCoin,
         ),
         const SizedBox(height: 8),
         SizedBox(
           height: isMobile ? 420 : 480,
           child: CoinChartPanel(
             coin: _selectedCoin,
+            priceHistories: _priceHistories,
           ),
         ),
         const SizedBox(height: 8),
