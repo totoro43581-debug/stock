@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:stock/core/game_time/game_time_config.dart';
@@ -13,22 +14,26 @@ import '../model/coin_trade_history_model.dart';
 
 class CoinRepository {
   final SupabaseClient _client = Supabase.instance.client;
+
   final AssetAccountRepository _assetAccountRepository =
   AssetAccountRepository();
 
   final GameTimeService _gameTimeService = const GameTimeService();
 
-  static const double _coinTradeFeeRate = 0.001;
+  // 매수 수수료 없음
+  static const double _coinBuyFeeRate = 0.0;
+
+  // 매도 수수료 0.1%
+  static const double _coinSellFeeRate = 0.001;
+
   static const double _quantityEpsilon = 0.00000001;
 
   static const int _coinMarketTickGameMinutes =
       GameTimeConfig.coinMarketTickGameMinutes;
 
-  static const int _maxCatchUpTickCount = 60;
+  static const int _maxCatchUpTickCount = 10;
 
   Future<List<CoinItemModel>> fetchActiveCoins() async {
-    await _simulateCoinMarketTickByElapsedGameTime();
-
     return _fetchActiveCoinsRaw();
   }
 
@@ -137,7 +142,7 @@ class CoinRepository {
 
   Future<List<CoinPriceHistoryModel>> fetchCoinPriceHistory({
     required String coinCode,
-    int limit = 300,
+    int limit = 100,
   }) async {
     if (coinCode.trim().isEmpty) {
       return [];
@@ -163,6 +168,10 @@ class CoinRepository {
     );
   }
 
+  Future<void> refreshCoinMarketByGameTime() async {
+    await _simulateCoinMarketTickByElapsedGameTime();
+  }
+
   Future<void> _simulateCoinMarketTickByElapsedGameTime() async {
     final DateTime now = _gameTimeService.nowUtc();
 
@@ -183,7 +192,9 @@ class CoinRepository {
     }
 
     final DateTime lastTickAt =
-        DateTime.tryParse(state['last_tick_at']?.toString() ?? '')?.toUtc() ??
+        DateTime.tryParse(
+          state['last_tick_at']?.toString() ?? '',
+        )?.toUtc() ??
             now;
 
     final int tickCount = _gameTimeService.elapsedMarketTickCount(
@@ -198,7 +209,23 @@ class CoinRepository {
     }
 
     for (int i = 0; i < tickCount; i++) {
-      await _simulateCoinMarketTickOnce();
+      debugPrint(
+        '코인 시세 틱 시작: ${i + 1}/$tickCount',
+      );
+
+      try {
+        await _simulateCoinMarketTickOnce();
+
+        debugPrint(
+          '코인 시세 틱 완료: ${i + 1}/$tickCount',
+        );
+      } catch (e) {
+        debugPrint(
+          '코인 시세 틱 실패: ${i + 1}/$tickCount / $e',
+        );
+
+        rethrow;
+      }
     }
 
     await _client.from('market_time_state').upsert({
@@ -221,55 +248,99 @@ class CoinRepository {
   }
 
   Future<void> _simulateCoinMarketTickOnce() async {
-    final List<CoinItemModel> coins = await _fetchActiveCoinsRaw();
+    final List<CoinItemModel> coins =
+    await _fetchActiveCoinsRaw();
+
     final Random random = Random();
 
     for (final coin in coins) {
-      final double volatilityWeight = _coinVolatilityWeight(coin.currentPrice);
+      final double volatilityWeight =
+      _coinVolatilityWeight(
+        coin.currentPrice,
+      );
 
-      final double direction = random.nextDouble() >= 0.5 ? 1 : -1;
-      final double baseMovePercent = 0.12 + random.nextDouble() * 0.6;
-      final bool hasSpike = random.nextDouble() < 0.07;
-      final double spikeMovePercent = hasSpike ? random.nextDouble() * 1.2 : 0;
+      final double direction =
+      random.nextDouble() >= 0.5 ? 1 : -1;
+
+      final double baseMovePercent =
+          0.12 + random.nextDouble() * 0.6;
+
+      final bool hasSpike =
+          random.nextDouble() < 0.07;
+
+      final double spikeMovePercent =
+      hasSpike
+          ? random.nextDouble() * 1.2
+          : 0;
 
       double movePercent =
-          direction * (baseMovePercent + spikeMovePercent) * volatilityWeight;
+          direction *
+              (baseMovePercent + spikeMovePercent) *
+              volatilityWeight;
 
-      movePercent = movePercent.clamp(-2.2, 2.2).toDouble();
+      movePercent =
+          movePercent.clamp(-2.2, 2.2).toDouble();
 
-      final double moveRate = movePercent / 100;
+      final double moveRate =
+          movePercent / 100;
 
-      double nextPrice = coin.currentPrice * (1 + moveRate);
+      double nextPrice =
+          coin.currentPrice * (1 + moveRate);
 
       if (nextPrice < 1) {
         nextPrice = 1;
       }
 
-      nextPrice = _normalizeCoinPrice(nextPrice);
+      nextPrice =
+          _normalizeCoinPrice(nextPrice);
 
       final double nextChangeRate =
-      (coin.changeRate + movePercent).clamp(-15.0, 15.0).toDouble();
+      (coin.changeRate + movePercent)
+          .clamp(-15.0, 15.0)
+          .toDouble();
 
       double nextTradeVolume =
-          coin.tradeVolume * (0.985 + random.nextDouble() * 0.03);
+          coin.tradeVolume *
+              (0.985 + random.nextDouble() * 0.03);
 
       if (nextTradeVolume < 1) {
         nextTradeVolume = 1;
       }
 
-      await _client.from('coin_item').update({
+      debugPrint(
+        'coin_item update 시작: ${coin.code}',
+      );
+
+      await _client
+          .from('coin_item')
+          .update({
         'current_price': nextPrice,
         'change_rate': nextChangeRate,
         'trade_volume': nextTradeVolume,
-      }).eq('code', coin.code);
+      })
+          .eq('code', coin.code);
 
-      await _client.from('coin_price_history').insert({
+      debugPrint(
+        'coin_item update 완료: ${coin.code}',
+      );
+
+      debugPrint(
+        'coin_price_history insert 시작: ${coin.code}',
+      );
+
+      await _client
+          .from('coin_price_history')
+          .insert({
         'coin_code': coin.code,
         'coin_name': coin.name,
         'price': nextPrice,
         'change_rate': nextChangeRate,
         'trade_volume': nextTradeVolume,
       });
+
+      debugPrint(
+        'coin_price_history insert 완료: ${coin.code}',
+      );
     }
   }
 
@@ -277,44 +348,63 @@ class CoinRepository {
     required CoinItemModel coin,
     required double quantity,
   }) async {
-    final User? user = _client.auth.currentUser;
+    final User? user =
+        _client.auth.currentUser;
 
     if (user == null) {
       throw Exception('로그인이 필요합니다.');
     }
 
     if (quantity <= 0) {
-      throw Exception('매수 수량을 입력해주세요.');
-    }
-
-    final double tradePrice = coin.currentPrice;
-
-    if (tradePrice <= 0) {
-      throw Exception('현재가가 올바르지 않습니다.');
-    }
-
-    final double rawAmount = tradePrice * quantity;
-    final double fee = rawAmount * _coinTradeFeeRate;
-    final double totalAmount = rawAmount + fee;
-
-    if (totalAmount <= 0) {
-      throw Exception('주문금액이 올바르지 않습니다.');
-    }
-
-    final double latestCoinCash =
-    await _assetAccountRepository.fetchAccountCashBalance(
-      accountType: 'coin',
-    );
-
-    if (latestCoinCash + 0.0001 < totalAmount) {
       throw Exception(
-        '코인 투자 계좌 잔액이 부족합니다. 필요금액: ${_formatMoney(totalAmount)}원',
+        '매수 수량을 입력해주세요.',
       );
     }
 
-    final double coinCashAfterBuy = latestCoinCash - totalAmount;
+    final double tradePrice =
+        coin.currentPrice;
 
-    final Map<String, dynamic>? currentHolding = await _client
+    if (tradePrice <= 0) {
+      throw Exception(
+        '현재가가 올바르지 않습니다.',
+      );
+    }
+
+    final double rawAmount =
+        tradePrice * quantity;
+
+    // 매수 수수료 없음
+    final double fee =
+        rawAmount * _coinBuyFeeRate;
+
+    final double totalAmount =
+        rawAmount + fee;
+
+    if (totalAmount <= 0) {
+      throw Exception(
+        '주문금액이 올바르지 않습니다.',
+      );
+    }
+
+    final double latestCoinCash =
+    await _assetAccountRepository
+        .fetchAccountCashBalance(
+      accountType: 'coin',
+    );
+
+    if (latestCoinCash + 0.0001 <
+        totalAmount) {
+      throw Exception(
+        '코인 투자 계좌 잔액이 부족합니다. '
+            '필요금액: ${_formatMoney(totalAmount)}원',
+      );
+    }
+
+    final double coinCashAfterBuy =
+        latestCoinCash - totalAmount;
+
+    final Map<String, dynamic>?
+    currentHolding = await _client
         .from('coin_holding')
         .select()
         .eq('user_id', user.id)
@@ -322,42 +412,72 @@ class CoinRepository {
         .maybeSingle();
 
     if (currentHolding == null) {
-      await _client.from('coin_holding').insert({
+      await _client
+          .from('coin_holding')
+          .insert({
         'user_id': user.id,
         'coin_code': coin.code,
         'coin_name': coin.name,
         'quantity': quantity,
         'average_price': tradePrice,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at':
+        DateTime.now()
+            .toIso8601String(),
       });
     } else {
-      final double currentQuantity = _toDouble(currentHolding['quantity']);
-      final double currentAveragePrice =
-      _toDouble(currentHolding['average_price']);
+      final double currentQuantity =
+      _toDouble(
+        currentHolding['quantity'],
+      );
 
-      final double currentTotal = currentQuantity * currentAveragePrice;
-      final double addedTotal = quantity * tradePrice;
-      final double nextQuantity = currentQuantity + quantity;
+      final double currentAveragePrice =
+      _toDouble(
+        currentHolding['average_price'],
+      );
+
+      final double currentTotal =
+          currentQuantity *
+              currentAveragePrice;
+
+      final double addedTotal =
+          quantity * tradePrice;
+
+      final double nextQuantity =
+          currentQuantity + quantity;
+
       final double nextAveragePrice =
-      nextQuantity <= 0 ? 0 : (currentTotal + addedTotal) / nextQuantity;
+      nextQuantity <= 0
+          ? 0
+          : (currentTotal +
+          addedTotal) /
+          nextQuantity;
 
       await _client
           .from('coin_holding')
           .update({
         'quantity': nextQuantity,
-        'average_price': nextAveragePrice,
-        'updated_at': DateTime.now().toIso8601String(),
+        'average_price':
+        nextAveragePrice,
+        'updated_at':
+        DateTime.now()
+            .toIso8601String(),
       })
           .eq('user_id', user.id)
-          .eq('coin_code', coin.code);
+          .eq(
+        'coin_code',
+        coin.code,
+      );
     }
 
-    await _assetAccountRepository.updateAccountCashBalance(
+    await _assetAccountRepository
+        .updateAccountCashBalance(
       accountType: 'coin',
       cashBalance: coinCashAfterBuy,
     );
 
-    await _client.from('coin_trade_history').insert({
+    await _client
+        .from('coin_trade_history')
+        .insert({
       'user_id': user.id,
       'coin_code': coin.code,
       'coin_name': coin.name,
@@ -365,17 +485,25 @@ class CoinRepository {
       'trade_price': tradePrice,
       'quantity': quantity,
       'total_amount': rawAmount,
+
+      // 매수 수수료는 0
       'fee': fee,
     });
 
-    await _assetAccountRepository.addAssetAccountTransaction(
-      type: 'withdraw',
+    await _assetAccountRepository
+        .addAssetAccountTransaction(
+      accountType: 'coin',
+      type: 'out',
       reason: 'coin_buy',
+
+      // 실제 매수금액만 차감
       amount: totalAmount,
+
       balanceAfter: coinCashAfterBuy,
       title: '${coin.name} 매수',
       memo:
-      '${coin.name} ${_formatQuantity(quantity)}개 · 수수료 ${_formatMoney(fee)}원',
+      '${coin.symbol} '
+          '${quantity.toStringAsFixed(8)}',
     );
   }
 
@@ -383,23 +511,30 @@ class CoinRepository {
     required CoinItemModel coin,
     required double quantity,
   }) async {
-    final User? user = _client.auth.currentUser;
+    final User? user =
+        _client.auth.currentUser;
 
     if (user == null) {
       throw Exception('로그인이 필요합니다.');
     }
 
     if (quantity <= 0) {
-      throw Exception('매도 수량을 입력해주세요.');
+      throw Exception(
+        '매도 수량을 입력해주세요.',
+      );
     }
 
-    final double tradePrice = coin.currentPrice;
+    final double tradePrice =
+        coin.currentPrice;
 
     if (tradePrice <= 0) {
-      throw Exception('현재가가 올바르지 않습니다.');
+      throw Exception(
+        '현재가가 올바르지 않습니다.',
+      );
     }
 
-    final Map<String, dynamic>? currentHolding = await _client
+    final Map<String, dynamic>?
+    currentHolding = await _client
         .from('coin_holding')
         .select()
         .eq('user_id', user.id)
@@ -407,113 +542,188 @@ class CoinRepository {
         .maybeSingle();
 
     if (currentHolding == null) {
-      throw Exception('보유 중인 코인이 없습니다.');
+      throw Exception(
+        '보유 중인 코인이 없습니다.',
+      );
     }
 
-    final double currentQuantity = _toDouble(currentHolding['quantity']);
+    final double currentQuantity =
+    _toDouble(
+      currentHolding['quantity'],
+    );
 
     if (currentQuantity <= 0) {
       await _client
           .from('coin_holding')
           .delete()
           .eq('user_id', user.id)
-          .eq('coin_code', coin.code);
+          .eq(
+        'coin_code',
+        coin.code,
+      );
 
-      throw Exception('보유 중인 코인이 없습니다.');
+      throw Exception(
+        '보유 중인 코인이 없습니다.',
+      );
     }
 
-    if (currentQuantity + _quantityEpsilon < quantity) {
+    if (currentQuantity +
+        _quantityEpsilon <
+        quantity) {
       throw Exception(
-        '보유 수량이 부족합니다. 보유수량: ${_formatQuantity(currentQuantity)}개',
+        '보유 수량이 부족합니다. '
+            '보유수량: '
+            '${_formatQuantity(currentQuantity)}개',
       );
     }
 
     final double safeQuantity =
-    quantity > currentQuantity ? currentQuantity : quantity;
+    quantity > currentQuantity
+        ? currentQuantity
+        : quantity;
 
-    final double rawAmount = tradePrice * safeQuantity;
-    final double fee = rawAmount * _coinTradeFeeRate;
-    final double receiveAmount = rawAmount - fee;
+    final double rawAmount =
+        tradePrice * safeQuantity;
+
+    // 매도 시에만 수수료 적용
+    final double fee =
+        rawAmount * _coinSellFeeRate;
+
+    final double receiveAmount =
+        rawAmount - fee;
 
     if (receiveAmount <= 0) {
-      throw Exception('매도 금액이 올바르지 않습니다.');
+      throw Exception(
+        '매도 금액이 올바르지 않습니다.',
+      );
     }
 
     final double latestCoinCash =
-    await _assetAccountRepository.fetchAccountCashBalance(
+    await _assetAccountRepository
+        .fetchAccountCashBalance(
       accountType: 'coin',
     );
 
-    final double coinCashAfterSell = latestCoinCash + receiveAmount;
-    final double nextQuantity = currentQuantity - safeQuantity;
+    final double coinCashAfterSell =
+        latestCoinCash + receiveAmount;
 
-    if (nextQuantity <= _quantityEpsilon) {
+    final double nextQuantity =
+        currentQuantity - safeQuantity;
+
+    if (nextQuantity <=
+        _quantityEpsilon) {
       await _client
           .from('coin_holding')
           .delete()
           .eq('user_id', user.id)
-          .eq('coin_code', coin.code);
+          .eq(
+        'coin_code',
+        coin.code,
+      );
     } else {
       await _client
           .from('coin_holding')
           .update({
         'quantity': nextQuantity,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at':
+        DateTime.now()
+            .toIso8601String(),
       })
           .eq('user_id', user.id)
-          .eq('coin_code', coin.code);
+          .eq(
+        'coin_code',
+        coin.code,
+      );
     }
 
-    await _assetAccountRepository.updateAccountCashBalance(
+    await _assetAccountRepository
+        .updateAccountCashBalance(
       accountType: 'coin',
       cashBalance: coinCashAfterSell,
     );
 
-    await _client.from('coin_trade_history').insert({
+    await _client
+        .from('coin_trade_history')
+        .insert({
       'user_id': user.id,
       'coin_code': coin.code,
       'coin_name': coin.name,
       'trade_type': 'sell',
       'trade_price': tradePrice,
       'quantity': safeQuantity,
+
+      // 수수료 공제 전 매도금액
       'total_amount': rawAmount,
+
+      // 실제 매도 수수료
       'fee': fee,
     });
 
-    await _assetAccountRepository.addAssetAccountTransaction(
-      type: 'deposit',
+    await _assetAccountRepository
+        .addAssetAccountTransaction(
+      accountType: 'coin',
+      type: 'in',
       reason: 'coin_sell',
+
+      // 실제 계좌에 들어오는 금액
       amount: receiveAmount,
-      balanceAfter: coinCashAfterSell,
+
+      balanceAfter:
+      coinCashAfterSell,
       title: '${coin.name} 매도',
       memo:
-      '${coin.name} ${_formatQuantity(safeQuantity)}개 · 수수료 ${_formatMoney(fee)}원',
+      '${coin.symbol} '
+          '${safeQuantity.toStringAsFixed(8)}',
     );
   }
 
-  double _coinVolatilityWeight(double price) {
-    if (price >= 1000000) return 0.7;
-    if (price >= 100000) return 0.85;
-    if (price >= 10000) return 1.0;
-    if (price >= 1000) return 1.15;
-    if (price >= 100) return 1.35;
+  double _coinVolatilityWeight(
+      double price,
+      ) {
+    if (price >= 1000000) {
+      return 0.7;
+    }
+
+    if (price >= 100000) {
+      return 0.85;
+    }
+
+    if (price >= 10000) {
+      return 1.0;
+    }
+
+    if (price >= 1000) {
+      return 1.15;
+    }
+
+    if (price >= 100) {
+      return 1.35;
+    }
 
     return 1.6;
   }
 
-  double _normalizeCoinPrice(double value) {
+  double _normalizeCoinPrice(
+      double value,
+      ) {
     if (value >= 1000) {
       return value.roundToDouble();
     }
 
     if (value >= 100) {
-      return double.parse(value.toStringAsFixed(1));
+      return double.parse(
+        value.toStringAsFixed(1),
+      );
     }
 
-    return double.parse(value.toStringAsFixed(2));
+    return double.parse(
+      value.toStringAsFixed(2),
+    );
   }
 
-  String _formatQuantity(double value) {
+  String _formatQuantity(
+      double value,
+      ) {
     if (value >= 1) {
       return value.toStringAsFixed(4);
     }
@@ -521,14 +731,26 @@ class CoinRepository {
     return value.toStringAsFixed(6);
   }
 
-  String _formatMoney(double value) {
+  String _formatMoney(
+      double value,
+      ) {
     return value.round().toString();
   }
 
-  double _toDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
+  double _toDouble(
+      dynamic value,
+      ) {
+    if (value == null) {
+      return 0;
+    }
 
-    return double.tryParse(value.toString()) ?? 0;
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(
+      value.toString(),
+    ) ??
+        0;
   }
 }

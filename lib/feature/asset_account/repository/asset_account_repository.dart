@@ -30,7 +30,7 @@ class AssetAccountRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // 수정37차: 특정 자산계좌 현금 조회
+  // 특정 자산계좌 현금 조회
   Future<double> fetchAccountCashBalance({
     required String accountType,
   }) async {
@@ -49,13 +49,15 @@ class AssetAccountRepository {
         .maybeSingle();
 
     if (response == null) {
-      throw Exception('${_accountTypeLabel(accountType)} 계좌를 찾을 수 없습니다.');
+      throw Exception(
+        '${_accountTypeLabel(accountType)} 계좌를 찾을 수 없습니다.',
+      );
     }
 
     return _toDouble(response['cash_balance']);
   }
 
-  // 수정37차: 특정 자산계좌 현금 변경
+  // 특정 자산계좌 현금 변경
   Future<void> updateAccountCashBalance({
     required String accountType,
     required double cashBalance,
@@ -77,12 +79,31 @@ class AssetAccountRepository {
         .eq('is_active', true);
   }
 
-  // 수정13차: 자산 계좌 간 이체 RPC 호출
+  // 자산계좌 간 이체 RPC 호출
   Future<Map<String, dynamic>> transferAssetAccountBalance({
     required String fromAccountType,
     required String toAccountType,
     required double amount,
   }) async {
+    final user = _client.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    if (fromAccountType.trim().isEmpty ||
+        toAccountType.trim().isEmpty) {
+      throw Exception('이체 계좌 정보가 올바르지 않습니다.');
+    }
+
+    if (fromAccountType == toAccountType) {
+      throw Exception('같은 계좌로는 이체할 수 없습니다.');
+    }
+
+    if (amount <= 0) {
+      throw Exception('이체 금액을 확인해주세요.');
+    }
+
     final response = await _client.rpc(
       'transfer_asset_account_balance',
       params: {
@@ -92,11 +113,16 @@ class AssetAccountRepository {
       },
     );
 
+    if (response == null) {
+      return {};
+    }
+
     return Map<String, dynamic>.from(response as Map);
   }
 
-  // 수정14차: 자산계좌 거래내역 저장
+  // 자산계좌 거래내역 저장
   Future<void> addAssetAccountTransaction({
+    required String accountType,
     required String type,
     required String reason,
     required double amount,
@@ -107,11 +133,28 @@ class AssetAccountRepository {
     final user = _client.auth.currentUser;
 
     if (user == null) {
-      return;
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    if (accountType.trim().isEmpty) {
+      throw Exception('계좌 유형이 올바르지 않습니다.');
+    }
+
+    if (type.trim().isEmpty) {
+      throw Exception('거래 유형이 올바르지 않습니다.');
+    }
+
+    if (reason.trim().isEmpty) {
+      throw Exception('거래 사유가 올바르지 않습니다.');
+    }
+
+    if (amount <= 0) {
+      throw Exception('거래 금액이 올바르지 않습니다.');
     }
 
     await _client.from('asset_account_transactions').insert({
       'user_id': user.id,
+      'account_type': accountType,
       'type': type,
       'reason': reason,
       'amount': amount,
@@ -122,8 +165,9 @@ class AssetAccountRepository {
     });
   }
 
-  // 수정15차: 전체/항목별 자산 거래내역 조회
+  // 전체 / 계좌별 / 항목별 자산 거래내역 조회
   Future<List<Map<String, dynamic>>> fetchAssetAccountTransactions({
+    String? accountType,
     List<String>? reasons,
     int limit = 30,
   }) async {
@@ -138,11 +182,18 @@ class AssetAccountRepository {
         .select()
         .eq('user_id', user.id);
 
+    if (accountType != null &&
+        accountType.trim().isNotEmpty) {
+      query = query.eq('account_type', accountType);
+    }
+
     if (reasons != null && reasons.isNotEmpty) {
       query = query.inFilter('reason', reasons);
     }
 
-    final response = await query.order('created_at', ascending: false).limit(limit);
+    final response = await query
+        .order('created_at', ascending: false)
+        .limit(limit);
 
     return List<Map<String, dynamic>>.from(response);
   }
@@ -155,6 +206,8 @@ class AssetAccountRepository {
         return '주식 투자';
       case 'coin':
         return '코인 투자';
+      case 'real_estate':
+        return '부동산 투자';
       default:
         return accountType;
     }
@@ -162,7 +215,11 @@ class AssetAccountRepository {
 
   double _toDouble(dynamic value) {
     if (value == null) return 0;
-    if (value is num) return value.toDouble();
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
     return double.tryParse(value.toString()) ?? 0;
   }
 }
