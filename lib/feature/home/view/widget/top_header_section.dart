@@ -15,12 +15,13 @@ class TopHeaderSection extends StatelessWidget {
 
   static const List<_HeaderMenuItem> _menus = [
     _HeaderMenuItem(text: '홈', menuKey: 'home'),
-    _HeaderMenuItem(text: '자산현황', menuKey: 'asset'),
-    _HeaderMenuItem(text: '계좌', menuKey: 'saving'),
+    _HeaderMenuItem(text: '자산', menuKey: 'asset'),
+    _HeaderMenuItem(text: '은행', menuKey: 'bank'),
     _HeaderMenuItem(text: '주식', menuKey: 'stock'),
     _HeaderMenuItem(text: '코인', menuKey: 'coin'),
     _HeaderMenuItem(text: '부동산', menuKey: 'real_estate'),
     _HeaderMenuItem(text: '리포트', menuKey: 'report'),
+    _HeaderMenuItem(text: '커뮤니티', menuKey: 'board'),
   ];
 
   @override
@@ -215,7 +216,7 @@ class _CompactMenuButton extends StatelessWidget {
   static const List<_HeaderMenuItem> _menus = [
     _HeaderMenuItem(text: '홈', menuKey: 'home'),
     _HeaderMenuItem(text: '자산현황', menuKey: 'asset'),
-    _HeaderMenuItem(text: '계좌', menuKey: 'saving'),
+    _HeaderMenuItem(text: '계좌', menuKey: 'account'),
     _HeaderMenuItem(text: '주식', menuKey: 'stock'),
     _HeaderMenuItem(text: '코인', menuKey: 'coin'),
     _HeaderMenuItem(text: '부동산', menuKey: 'real_estate'),

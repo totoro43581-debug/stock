@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class AssetTransactionListWidget extends StatelessWidget {
+class AssetTransactionListWidget extends StatefulWidget {
   final String title;
   final List<Map<String, dynamic>> transactions;
 
@@ -10,6 +10,39 @@ class AssetTransactionListWidget extends StatelessWidget {
     required this.title,
     required this.transactions,
   });
+
+  @override
+  State<AssetTransactionListWidget> createState() =>
+      _AssetTransactionListWidgetState();
+}
+
+class _AssetTransactionListWidgetState
+    extends State<AssetTransactionListWidget> {
+  static const int _defaultVisibleCount = 5;
+
+  bool _isExpanded = false;
+
+  List<Map<String, dynamic>> get _visibleTransactions {
+    if (_isExpanded ||
+        widget.transactions.length <= _defaultVisibleCount) {
+      return widget.transactions;
+    }
+
+    return widget.transactions
+        .take(_defaultVisibleCount)
+        .toList();
+  }
+
+  @override
+  void didUpdateWidget(
+      covariant AssetTransactionListWidget oldWidget,
+      ) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.title != widget.title) {
+      _isExpanded = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,24 +65,27 @@ class AssetTransactionListWidget extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
+
           const SizedBox(height: 12),
 
-          if (transactions.isEmpty)
+          if (widget.transactions.isEmpty)
             _buildEmptyBox()
-          else
+          else ...[
             Column(
               children: [
                 for (
                 int i = 0;
-                i < transactions.length;
+                i < _visibleTransactions.length;
                 i++
                 ) ...[
                   _buildTransactionRow(
-                    transaction: transactions[i],
+                    transaction:
+                    _visibleTransactions[i],
                     isCompact: isCompact,
                   ),
 
-                  if (i != transactions.length - 1)
+                  if (i !=
+                      _visibleTransactions.length - 1)
                     const Divider(
                       height: 1,
                       color: Color(0xFFE5E7EB),
@@ -57,6 +93,14 @@ class AssetTransactionListWidget extends StatelessWidget {
                 ],
               ],
             ),
+
+            if (widget.transactions.length >
+                _defaultVisibleCount) ...[
+              const SizedBox(height: 14),
+
+              _buildMoreButton(),
+            ],
+          ],
         ],
       ),
     );
@@ -65,15 +109,17 @@ class AssetTransactionListWidget extends StatelessWidget {
   Widget _buildHeader() {
     return Row(
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF111827),
+        Expanded(
+          child: Text(
+            widget.title,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF111827),
+            ),
           ),
         ),
-        const Spacer(),
+
         Container(
           height: 28,
           padding: const EdgeInsets.symmetric(
@@ -82,18 +128,76 @@ class AssetTransactionListWidget extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: const Color(0xFFF3F4F6),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius:
+            BorderRadius.circular(999),
           ),
           child: Text(
-            '최근 ${transactions.length}건',
+            '총 ${widget.transactions.length}건',
             style: const TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               color: Color(0xFF4B5563),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMoreButton() {
+    final int remainCount =
+        widget.transactions.length -
+            _defaultVisibleCount;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 42,
+      child: OutlinedButton(
+        onPressed: () {
+          setState(() {
+            _isExpanded = !_isExpanded;
+          });
+        },
+        style: OutlinedButton.styleFrom(
+          backgroundColor:
+          const Color(0xFFF9FAFB),
+          foregroundColor:
+          const Color(0xFF374151),
+          side: const BorderSide(
+            color: Color(0xFFE5E7EB),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius:
+            BorderRadius.circular(10),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment:
+          MainAxisAlignment.center,
+          children: [
+            Text(
+              _isExpanded
+                  ? '접기'
+                  : '더보기 ($remainCount건)',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+
+            const SizedBox(width: 5),
+
+            Icon(
+              _isExpanded
+                  ? Icons
+                  .keyboard_arrow_up_rounded
+                  : Icons
+                  .keyboard_arrow_down_rounded,
+              size: 19,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -104,7 +208,8 @@ class AssetTransactionListWidget extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius:
+        BorderRadius.circular(12),
         border: Border.all(
           color: const Color(0xFFE5E7EB),
         ),
@@ -131,10 +236,13 @@ class AssetTransactionListWidget extends StatelessWidget {
         transaction['reason']?.toString() ?? '';
 
     final String accountType =
-        transaction['account_type']?.toString() ?? '';
+        transaction['account_type']
+            ?.toString() ??
+            '';
 
     final String rowTitle =
-        transaction['title']?.toString() ?? '-';
+        transaction['title']?.toString() ??
+            '-';
 
     final String memo =
         transaction['memo']?.toString() ?? '';
@@ -143,14 +251,15 @@ class AssetTransactionListWidget extends StatelessWidget {
     _toDouble(transaction['amount']);
 
     final double balanceAfter =
-    _toDouble(transaction['balance_after']);
+    _toDouble(
+      transaction['balance_after'],
+    );
 
     final DateTime? createdAt =
     _toNullableDateTime(
       transaction['created_at'],
     );
 
-    // 기존 + 신규 타입 모두 호환
     final bool isDeposit =
         type == 'deposit' || type == 'in';
 
@@ -158,18 +267,23 @@ class AssetTransactionListWidget extends StatelessWidget {
         type == 'transfer';
 
     final Color mainColor;
-
     final Color chipColor;
 
     if (isTransfer) {
-      mainColor = const Color(0xFF2563EB);
-      chipColor = const Color(0xFFDBEAFE);
+      mainColor =
+      const Color(0xFF2563EB);
+      chipColor =
+      const Color(0xFFDBEAFE);
     } else if (isDeposit) {
-      mainColor = const Color(0xFF15803D);
-      chipColor = const Color(0xFFDCFCE7);
+      mainColor =
+      const Color(0xFF15803D);
+      chipColor =
+      const Color(0xFFDCFCE7);
     } else {
-      mainColor = const Color(0xFFB91C1C);
-      chipColor = const Color(0xFFFEE2E2);
+      mainColor =
+      const Color(0xFFB91C1C);
+      chipColor =
+      const Color(0xFFFEE2E2);
     }
 
     if (isCompact) {
@@ -229,7 +343,6 @@ class AssetTransactionListWidget extends StatelessWidget {
       child: Row(
         children: [
           _buildTypeChip(
-            type: type,
             isDeposit: isDeposit,
             isTransfer: isTransfer,
             mainColor: mainColor,
@@ -246,10 +359,11 @@ class AssetTransactionListWidget extends StatelessWidget {
               ),
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF374151),
+                fontWeight:
+                FontWeight.w900,
+                color:
+                Color(0xFF374151),
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ),
 
@@ -277,7 +391,8 @@ class AssetTransactionListWidget extends StatelessWidget {
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: 15,
-                fontWeight: FontWeight.w900,
+                fontWeight:
+                FontWeight.w900,
                 color: mainColor,
               ),
             ),
@@ -292,8 +407,10 @@ class AssetTransactionListWidget extends StatelessWidget {
               textAlign: TextAlign.right,
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF374151),
+                fontWeight:
+                FontWeight.w800,
+                color:
+                Color(0xFF374151),
               ),
             ),
           ),
@@ -305,12 +422,16 @@ class AssetTransactionListWidget extends StatelessWidget {
             child: Text(
               createdAt == null
                   ? '-'
-                  : _formatDateTime(createdAt),
+                  : _formatDateTime(
+                createdAt,
+              ),
               textAlign: TextAlign.right,
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF6B7280),
+                fontWeight:
+                FontWeight.w700,
+                color:
+                Color(0xFF6B7280),
               ),
             ),
           ),
@@ -333,7 +454,7 @@ class AssetTransactionListWidget extends StatelessWidget {
     required double balanceAfter,
     required DateTime? createdAt,
   }) {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.symmetric(
         vertical: 12,
       ),
@@ -344,7 +465,6 @@ class AssetTransactionListWidget extends StatelessWidget {
           Row(
             children: [
               _buildTypeChip(
-                type: type,
                 isDeposit: isDeposit,
                 isTransfer: isTransfer,
                 mainColor: mainColor,
@@ -359,8 +479,10 @@ class AssetTransactionListWidget extends StatelessWidget {
                 ),
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF374151),
+                  fontWeight:
+                  FontWeight.w900,
+                  color:
+                  Color(0xFF374151),
                 ),
               ),
 
@@ -374,8 +496,8 @@ class AssetTransactionListWidget extends StatelessWidget {
                 ),
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF6B7280),
+                  color:
+                  Color(0xFF6B7280),
                 ),
               ),
             ],
@@ -402,7 +524,8 @@ class AssetTransactionListWidget extends StatelessWidget {
                 ),
                 style: TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w900,
+                  fontWeight:
+                  FontWeight.w900,
                   color: mainColor,
                 ),
               ),
@@ -413,8 +536,10 @@ class AssetTransactionListWidget extends StatelessWidget {
                 '잔액 ${_formatMoney(balanceAfter)}원',
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF374151),
+                  fontWeight:
+                  FontWeight.w800,
+                  color:
+                  Color(0xFF374151),
                 ),
               ),
             ],
@@ -425,21 +550,16 @@ class AssetTransactionListWidget extends StatelessWidget {
   }
 
   Widget _buildTypeChip({
-    required String type,
     required bool isDeposit,
     required bool isTransfer,
     required Color mainColor,
     required Color chipColor,
   }) {
-    String label;
-
-    if (isTransfer) {
-      label = '이체';
-    } else if (isDeposit) {
-      label = '입금';
-    } else {
-      label = '출금';
-    }
+    final String label = isTransfer
+        ? '이체'
+        : isDeposit
+        ? '입금'
+        : '출금';
 
     return Container(
       width: 58,
@@ -447,7 +567,8 @@ class AssetTransactionListWidget extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: chipColor,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius:
+        BorderRadius.circular(999),
       ),
       child: Text(
         label,
@@ -471,7 +592,9 @@ class AssetTransactionListWidget extends StatelessWidget {
 
     final String detailText =
     memo.isEmpty
-        ? _transactionReasonLabel(reason)
+        ? _transactionReasonLabel(
+      reason,
+    )
         : memo;
 
     return Column(
@@ -514,8 +637,7 @@ class AssetTransactionListWidget extends StatelessWidget {
       return '${_formatMoney(amount)}원';
     }
 
-    return '${isDeposit ? '+' : '-'}'
-        '${_formatMoney(amount)}원';
+    return '${isDeposit ? '+' : '-'}${_formatMoney(amount)}원';
   }
 
   static String _accountTypeLabel(
@@ -524,16 +646,12 @@ class AssetTransactionListWidget extends StatelessWidget {
     switch (accountType) {
       case 'bank':
         return '생활 현금';
-
       case 'stock':
         return '주식 투자';
-
       case 'coin':
         return '코인 투자';
-
       case 'real_estate':
         return '부동산 투자';
-
       default:
         return '';
     }
@@ -587,22 +705,22 @@ class AssetTransactionListWidget extends StatelessWidget {
       ) {
     switch (reason) {
       case 'point_to_asset':
-        return '포인트에서 생활 현금 계좌로 입금';
+        return '포인트 입금';
 
       case 'asset_transfer':
         return '계좌 간 이체';
 
       case 'asset_to_deposit':
-        return '생활 현금 계좌에서 예금으로 이동';
+        return '예금 입금';
 
       case 'deposit_to_asset':
-        return '예금에서 생활 현금 계좌로 입금';
+        return '예금 출금';
 
       case 'asset_to_savings':
-        return '생활 현금 계좌에서 적금으로 이동';
+        return '적금 입금';
 
       case 'savings_to_asset':
-        return '적금에서 생활 현금 계좌로 입금';
+        return '적금 출금';
 
       case 'asset_to_stock':
       case 'stock_buy':
@@ -656,9 +774,7 @@ class AssetTransactionListWidget extends StatelessWidget {
   static DateTime? _toNullableDateTime(
       dynamic value,
       ) {
-    if (value == null) {
-      return null;
-    }
+    if (value == null) return null;
 
     if (value is DateTime) {
       return value;
@@ -672,9 +788,7 @@ class AssetTransactionListWidget extends StatelessWidget {
   static double _toDouble(
       dynamic value,
       ) {
-    if (value == null) {
-      return 0;
-    }
+    if (value == null) return 0;
 
     if (value is num) {
       return value.toDouble();

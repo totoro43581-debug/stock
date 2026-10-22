@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/asset_account/repository/asset_account_repository.dart';
+import 'package:stock/feature/asset_account/view/asset_account_screen.dart';
 import 'package:stock/feature/bank/view/bank_screen.dart';
 import 'package:stock/feature/stock/view/stock_screen.dart';
 import 'package:stock/feature/wallet/repository/wallet_repository.dart';
@@ -446,11 +447,14 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isMobile,
   }) {
     switch (_selectedMenu) {
+      case 'asset':
+        return const AssetAccountScreen();
+
+      case 'bank':
+        return const BankScreen();
+
       case 'stock':
         return const StockScreen();
-
-      case 'saving':
-        return const BankScreen();
 
       case 'coin':
         return const CoinScreen();
@@ -462,10 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return _buildPreparingContent('리포트');
 
       case 'board':
-        return _buildPreparingContent('자유게시판');
-
-      case 'asset':
-        return _buildPreparingContent('자산현황');
+        return _buildPreparingContent('커뮤니티');
 
       case 'home':
       default:
@@ -547,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 SizedBox(height: sectionGap),
                 CategoryGridSection(
-                  onTapSaving: () => _handleMenuSelected('saving'),
+                  onTapSaving: () => _handleMenuSelected('bank'),
                   onTapStock: () => _handleMenuSelected('stock'),
                   onTapCoin: () => _handleMenuSelected('coin'),
                   onTapRealEstate: () => _handleMenuSelected('real_estate'),

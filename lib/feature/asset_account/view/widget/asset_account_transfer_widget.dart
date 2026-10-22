@@ -63,7 +63,9 @@ class _AssetAccountTransferWidgetState
 
       final accounts = rows
           .map(AssetAccountModel.fromMap)
-          .where((account) => account.isActive)
+          .where(
+            (account) => account.isActive,
+      )
           .toList();
 
       if (!mounted) return;
@@ -82,26 +84,28 @@ class _AssetAccountTransferWidgetState
         )) {
           nextFrom = 'bank';
         } else if (accounts.isNotEmpty) {
-          nextFrom = accounts.first.accountType;
+          nextFrom =
+              accounts.first.accountType;
         }
       }
 
       if (nextTo == null ||
-          nextTo == nextFrom ||
           !accounts.any(
                 (account) =>
             account.accountType == nextTo,
           )) {
-        final candidates = accounts
-            .where(
+        if (accounts.any(
               (account) =>
-          account.accountType != nextFrom,
-        )
-            .toList();
-
-        nextTo = candidates.isEmpty
-            ? null
-            : candidates.first.accountType;
+          account.accountType == 'stock',
+        )) {
+          nextTo = 'stock';
+        } else if (accounts.length >= 2) {
+          nextTo =
+              accounts[1].accountType;
+        } else if (accounts.isNotEmpty) {
+          nextTo =
+              accounts.first.accountType;
+        }
       }
 
       setState(() {
@@ -117,14 +121,10 @@ class _AssetAccountTransferWidgetState
         _isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst(
-              'Exception: ',
-              '',
-            ),
-          ),
+      _showMessage(
+        e.toString().replaceFirst(
+          'Exception: ',
+          '',
         ),
       );
     }
@@ -138,7 +138,8 @@ class _AssetAccountTransferWidgetState
     }
 
     for (final account in _accounts) {
-      if (account.accountType == accountType) {
+      if (account.accountType ==
+          accountType) {
         return account;
       }
     }
@@ -147,7 +148,7 @@ class _AssetAccountTransferWidgetState
   }
 
   double get _inputAmount {
-    final String value = _amountController.text
+    final value = _amountController.text
         .replaceAll(',', '')
         .trim();
 
@@ -188,7 +189,7 @@ class _AssetAccountTransferWidgetState
       return;
     }
 
-    final AssetAccountModel? fromAccount =
+    final fromAccount =
     _findAccount(fromType);
 
     if (fromAccount == null) {
@@ -198,7 +199,8 @@ class _AssetAccountTransferWidgetState
       return;
     }
 
-    if (fromAccount.cashBalance < amount) {
+    if (fromAccount.cashBalance <
+        amount) {
       _showMessage(
         '출금 계좌 잔액이 부족합니다.',
       );
@@ -253,8 +255,8 @@ class _AssetAccountTransferWidgetState
     }
 
     setState(() {
-      final String oldFrom =
-      _fromAccountType!;
+      final oldFrom =
+          _fromAccountType;
 
       _fromAccountType =
           _toAccountType;
@@ -273,7 +275,9 @@ class _AssetAccountTransferWidgetState
 
   void _setAllAmount() {
     final account =
-    _findAccount(_fromAccountType);
+    _findAccount(
+      _fromAccountType,
+    );
 
     if (account == null) return;
 
@@ -288,7 +292,8 @@ class _AssetAccountTransferWidgetState
       ) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -298,7 +303,8 @@ class _AssetAccountTransferWidgetState
   @override
   Widget build(BuildContext context) {
     final bool isCompact =
-        MediaQuery.of(context).size.width < 760;
+        MediaQuery.of(context).size.width <
+            760;
 
     return Container(
       width: double.infinity,
@@ -316,7 +322,7 @@ class _AssetAccountTransferWidgetState
       ),
       child: _isLoading
           ? const SizedBox(
-        height: 160,
+        height: 140,
         child: Center(
           child:
           CircularProgressIndicator(),
@@ -326,124 +332,74 @@ class _AssetAccountTransferWidgetState
         crossAxisAlignment:
         CrossAxisAlignment.start,
         children: [
-          const Text(
-            '계좌 이체',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight:
-              FontWeight.w900,
-              color:
-              Color(0xFF111827),
-            ),
+          _buildHeader(),
+
+          const SizedBox(
+            height: 16,
           ),
-
-          const SizedBox(height: 6),
-
-          const Text(
-            '생활 현금 · 주식 · 코인 · 부동산 계좌 간 자금을 이동합니다.',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight:
-              FontWeight.w700,
-              color:
-              Color(0xFF6B7280),
-            ),
-          ),
-
-          const SizedBox(height: 18),
 
           if (isCompact)
             _buildCompactAccounts()
           else
             _buildWideAccounts(),
 
-          const SizedBox(height: 16),
-
-          _buildAmountField(),
-
-          const SizedBox(height: 10),
-
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _quickButton(
-                '1만원',
-                    () => _setQuickAmount(
-                  10000,
-                ),
-              ),
-              _quickButton(
-                '5만원',
-                    () => _setQuickAmount(
-                  50000,
-                ),
-              ),
-              _quickButton(
-                '10만원',
-                    () => _setQuickAmount(
-                  100000,
-                ),
-              ),
-              _quickButton(
-                '100만원',
-                    () => _setQuickAmount(
-                  1000000,
-                ),
-              ),
-              _quickButton(
-                '전액',
-                _setAllAmount,
-              ),
-            ],
+          const SizedBox(
+            height: 14,
           ),
 
-          const SizedBox(height: 18),
+          if (isCompact)
+            _buildCompactAmountArea()
+          else
+            _buildWideAmountArea(),
 
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed:
-              _isProcessing
-                  ? null
-                  : _transfer,
-              child: _isProcessing
-                  ? const SizedBox(
-                width: 20,
-                height: 20,
-                child:
-                CircularProgressIndicator(
-                  strokeWidth: 2,
-                ),
-              )
-                  : const Text(
-                '이체하기',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight:
-                  FontWeight
-                      .w900,
-                ),
-              ),
-            ),
+          const SizedBox(
+            height: 10,
           ),
+
+          _buildQuickButtons(),
         ],
       ),
     );
   }
 
+  Widget _buildHeader() {
+    return const Column(
+      crossAxisAlignment:
+      CrossAxisAlignment.start,
+      children: [
+        Text(
+          '계좌 이체',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight:
+            FontWeight.w900,
+            color:
+            Color(0xFF111827),
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          '생활 현금과 투자계좌 사이에서 자금을 이동합니다.',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight:
+            FontWeight.w700,
+            color:
+            Color(0xFF6B7280),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildWideAccounts() {
     return Row(
-      crossAxisAlignment:
-      CrossAxisAlignment.center,
       children: [
         Expanded(
           child: _buildAccountSelector(
             title: '출금 계좌',
-            value: _fromAccountType,
-            excludeType:
-            _toAccountType,
+            value:
+            _fromAccountType,
             onChanged: (value) {
               setState(() {
                 _fromAccountType =
@@ -455,11 +411,20 @@ class _AssetAccountTransferWidgetState
 
         const SizedBox(width: 12),
 
-        IconButton(
-          onPressed: _swapAccounts,
-          tooltip: '계좌 바꾸기',
-          icon: const Icon(
-            Icons.swap_horiz_rounded,
+        SizedBox(
+          width: 42,
+          height: 42,
+          child: IconButton(
+            padding:
+            EdgeInsets.zero,
+            onPressed:
+            _swapAccounts,
+            tooltip: '계좌 바꾸기',
+            icon: const Icon(
+              Icons
+                  .swap_horiz_rounded,
+              size: 22,
+            ),
           ),
         ),
 
@@ -468,9 +433,8 @@ class _AssetAccountTransferWidgetState
         Expanded(
           child: _buildAccountSelector(
             title: '입금 계좌',
-            value: _toAccountType,
-            excludeType:
-            _fromAccountType,
+            value:
+            _toAccountType,
             onChanged: (value) {
               setState(() {
                 _toAccountType =
@@ -488,9 +452,8 @@ class _AssetAccountTransferWidgetState
       children: [
         _buildAccountSelector(
           title: '출금 계좌',
-          value: _fromAccountType,
-          excludeType:
-          _toAccountType,
+          value:
+          _fromAccountType,
           onChanged: (value) {
             setState(() {
               _fromAccountType =
@@ -501,11 +464,17 @@ class _AssetAccountTransferWidgetState
 
         const SizedBox(height: 8),
 
-        IconButton(
-          onPressed: _swapAccounts,
-          tooltip: '계좌 바꾸기',
-          icon: const Icon(
-            Icons.swap_vert_rounded,
+        SizedBox(
+          height: 36,
+          child: IconButton(
+            padding:
+            EdgeInsets.zero,
+            onPressed:
+            _swapAccounts,
+            tooltip: '계좌 바꾸기',
+            icon: const Icon(
+              Icons.swap_vert_rounded,
+            ),
           ),
         ),
 
@@ -513,9 +482,8 @@ class _AssetAccountTransferWidgetState
 
         _buildAccountSelector(
           title: '입금 계좌',
-          value: _toAccountType,
-          excludeType:
-          _fromAccountType,
+          value:
+          _toAccountType,
           onChanged: (value) {
             setState(() {
               _toAccountType =
@@ -530,25 +498,18 @@ class _AssetAccountTransferWidgetState
   Widget _buildAccountSelector({
     required String title,
     required String? value,
-    required String? excludeType,
     required ValueChanged<String?>
     onChanged,
   }) {
-    final AssetAccountModel? account =
+    final account =
     _findAccount(value);
-
-    final availableAccounts =
-    _accounts
-        .where(
-          (item) =>
-      item.accountType !=
-          excludeType,
-    )
-        .toList();
 
     return Container(
       padding:
-      const EdgeInsets.all(14),
+      const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
       decoration: BoxDecoration(
         color:
         const Color(0xFFF9FAFB),
@@ -563,57 +524,83 @@ class _AssetAccountTransferWidgetState
         crossAxisAlignment:
         CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight:
-              FontWeight.w800,
-              color:
-              Color(0xFF6B7280),
-            ),
+          Row(
+            children: [
+              Text(
+                title,
+                style:
+                const TextStyle(
+                  fontSize: 11,
+                  fontWeight:
+                  FontWeight.w800,
+                  color:
+                  Color(0xFF6B7280),
+                ),
+              ),
+
+              const Spacer(),
+
+              Text(
+                account == null
+                    ? '잔액 -'
+                    : '${_moneyFormat.format(account.cashBalance.floor())}원',
+                style:
+                const TextStyle(
+                  fontSize: 12,
+                  fontWeight:
+                  FontWeight.w900,
+                  color:
+                  Color(0xFF111827),
+                ),
+              ),
+            ],
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 7),
 
-          DropdownButtonFormField<String>(
-            initialValue: value,
-            isExpanded: true,
-            decoration:
-            const InputDecoration(
-              border:
-              OutlineInputBorder(),
+          DropdownButtonHideUnderline(
+            child:
+            DropdownButton<String>(
+              value: value,
+              isExpanded: true,
               isDense: true,
-            ),
-            items: availableAccounts
-                .map(
-                  (item) =>
-                  DropdownMenuItem(
-                    value:
-                    item.accountType,
-                    child: Text(
-                      _accountLabel(
-                        item,
+
+              dropdownColor: Colors.white,
+              focusColor: Colors.transparent,
+
+              borderRadius:
+              BorderRadius.circular(
+                12,
+              ),
+              icon: const Icon(
+                Icons
+                    .keyboard_arrow_down_rounded,
+                size: 20,
+              ),
+              style:
+              const TextStyle(
+                fontSize: 14,
+                fontWeight:
+                FontWeight.w800,
+                color:
+                Color(0xFF111827),
+              ),
+              items: _accounts
+                  .map(
+                    (item) =>
+                    DropdownMenuItem<
+                        String>(
+                      value:
+                      item.accountType,
+                      child: Text(
+                        _accountLabel(
+                          item,
+                        ),
                       ),
                     ),
-                  ),
-            )
-                .toList(),
-            onChanged: onChanged,
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            account == null
-                ? '잔액 -'
-                : '잔액 ${_moneyFormat.format(account.cashBalance.floor())}원',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight:
-              FontWeight.w900,
-              color:
-              Color(0xFF111827),
+              )
+                  .toList(),
+              onChanged: onChanged,
             ),
           ),
         ],
@@ -621,19 +608,179 @@ class _AssetAccountTransferWidgetState
     );
   }
 
+  Widget _buildWideAmountArea() {
+    return Row(
+      children: [
+        Expanded(
+          child:
+          _buildAmountField(),
+        ),
+
+        const SizedBox(width: 10),
+
+        SizedBox(
+          width: 160,
+          height: 44,
+          child:
+          _buildTransferButton(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactAmountArea() {
+    return Column(
+      children: [
+        _buildAmountField(),
+
+        const SizedBox(height: 10),
+
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child:
+          _buildTransferButton(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAmountField() {
-    return TextField(
-      controller:
-      _amountController,
-      keyboardType:
-      TextInputType.number,
-      decoration:
-      const InputDecoration(
-        labelText: '이체 금액',
-        suffixText: '원',
-        border:
-        OutlineInputBorder(),
+    return SizedBox(
+      height: 44,
+      child: TextField(
+        controller:
+        _amountController,
+        keyboardType:
+        TextInputType.number,
+        decoration:
+        InputDecoration(
+          hintText: '이체 금액',
+          suffixText: '원',
+          contentPadding:
+          const EdgeInsets.symmetric(
+            horizontal: 14,
+          ),
+          filled: true,
+          fillColor:
+          const Color(0xFFF9FAFB),
+          border:
+          OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(
+              10,
+            ),
+            borderSide:
+            const BorderSide(
+              color:
+              Color(0xFFE5E7EB),
+            ),
+          ),
+          enabledBorder:
+          OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(
+              10,
+            ),
+            borderSide:
+            const BorderSide(
+              color:
+              Color(0xFFE5E7EB),
+            ),
+          ),
+          focusedBorder:
+          OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(
+              10,
+            ),
+            borderSide:
+            const BorderSide(
+              color:
+              Color(0xFF2563EB),
+            ),
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildTransferButton() {
+    return ElevatedButton(
+      onPressed:
+      _isProcessing
+          ? null
+          : _transfer,
+      style:
+      ElevatedButton.styleFrom(
+        elevation: 0,
+        backgroundColor:
+        const Color(0xFF111827),
+        foregroundColor:
+        Colors.white,
+        shape:
+        RoundedRectangleBorder(
+          borderRadius:
+          BorderRadius.circular(
+            10,
+          ),
+        ),
+      ),
+      child: _isProcessing
+          ? const SizedBox(
+        width: 19,
+        height: 19,
+        child:
+        CircularProgressIndicator(
+          strokeWidth: 2,
+          color: Colors.white,
+        ),
+      )
+          : const Text(
+        '이체하기',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight:
+          FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickButtons() {
+    return Wrap(
+      spacing: 7,
+      runSpacing: 7,
+      children: [
+        _quickButton(
+          '1만원',
+              () => _setQuickAmount(
+            10000,
+          ),
+        ),
+        _quickButton(
+          '5만원',
+              () => _setQuickAmount(
+            50000,
+          ),
+        ),
+        _quickButton(
+          '10만원',
+              () => _setQuickAmount(
+            100000,
+          ),
+        ),
+        _quickButton(
+          '100만원',
+              () => _setQuickAmount(
+            1000000,
+          ),
+        ),
+        _quickButton(
+          '전액',
+          _setAllAmount,
+        ),
+      ],
     );
   }
 
@@ -641,12 +788,44 @@ class _AssetAccountTransferWidgetState
       String label,
       VoidCallback onPressed,
       ) {
-    return OutlinedButton(
-      onPressed:
-      _isProcessing
-          ? null
-          : onPressed,
-      child: Text(label),
+    return SizedBox(
+      height: 34,
+      child: OutlinedButton(
+        onPressed:
+        _isProcessing
+            ? null
+            : onPressed,
+        style:
+        OutlinedButton.styleFrom(
+          padding:
+          const EdgeInsets.symmetric(
+            horizontal: 15,
+          ),
+          foregroundColor:
+          const Color(0xFF374151),
+          side:
+          const BorderSide(
+            color:
+            Color(0xFFD1D5DB),
+          ),
+          shape:
+          RoundedRectangleBorder(
+            borderRadius:
+            BorderRadius.circular(
+              9,
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style:
+          const TextStyle(
+            fontSize: 12,
+            fontWeight:
+            FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 
@@ -667,7 +846,9 @@ class _AssetAccountTransferWidgetState
         return '부동산 투자';
 
       default:
-        if (account.accountName.trim().isNotEmpty) {
+        if (account.accountName
+            .trim()
+            .isNotEmpty) {
           return account.accountName;
         }
 
