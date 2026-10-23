@@ -8,6 +8,8 @@ import 'package:stock/feature/asset_account/view/widget/asset_transaction_list_w
 import 'package:stock/feature/bank/model/bank_product_model.dart';
 import 'package:stock/feature/bank/model/user_bank_account_model.dart';
 import 'package:stock/feature/bank/repository/bank_repository.dart';
+import 'package:stock/feature/bank/view/widget/loan_catalog_section.dart';
+
 
 class BankScreen extends StatefulWidget {
   const BankScreen({super.key});
@@ -931,75 +933,12 @@ class _BankScreenState extends State<BankScreen> {
     );
   }
 
-  Widget _loanTab() {
-    return _panel(
-      '대출',
-      '대출 실행·이자·상환 기능은 추후 '
-          'Supabase 테이블 및 RPC와 연결합니다.',
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _responsiveCards([
-            _loanCard(
-              '신용대출',
-              '신용등급과 금융 상태에 따라 한도를 산정하는 상품',
-            ),
-            _loanCard(
-              '주택담보대출',
-              '보유 부동산을 담보로 설정하는 상품',
-            ),
-            _loanCard(
-              '사업자대출',
-              '향후 사업 콘텐츠와 연결할 상품',
-            ),
-          ]),
-          const SizedBox(height: 12),
-          const Text(
-            '※ 실제 대출 가능 금액·금리·잔액은 '
-                '아직 구현되지 않았습니다.',
-            style: TextStyle(
-              fontSize: 12,
-              color: _muted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _loanCard(
-      String title,
-      String description,
-      ) {
-    return _smallCard(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            style: const TextStyle(
-              fontSize: 13,
-              color: _muted,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            '준비 중',
-            style: TextStyle(
-              color: _muted,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+  Widget _loanTab() {
+    return LoanCatalogSection(
+      onChanged: () {
+        _loadData(showLoading: false);
+      },
     );
   }
 

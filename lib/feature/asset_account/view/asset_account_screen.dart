@@ -32,6 +32,7 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
   List<StockHoldingModel> _stocks = [];
   List<CoinHoldingModel> _coins = [];
   List<UserBankAccountModel> _bankProducts = [];
+  Map<String, dynamic> _loanLiabilities = {};
   List<_InvestmentTrade> _trades = [];
   Map<String, double> _stockPrices = {};
   Map<String, double> _coinPrices = {};
@@ -95,6 +96,13 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
       final stocks = await _stockRepo.fetchHoldings(user.id);
       final coins = await _coinRepo.fetchMyCoinHoldings();
       final bankProducts = await _bankRepo.fetchMyActiveBankAccounts();
+
+      final loanResponse = await _client.rpc('get_my_loan_liabilities');
+
+      final loanLiabilities = loanResponse is Map
+          ? Map<String, dynamic>.from(loanResponse)
+          : <String, dynamic>{};
+
       final stockHistory = await _stockRepo.fetchTradeHistory(user.id);
       final coinHistory = await _coinRepo.fetchMyCoinTradeHistory();
 
@@ -137,6 +145,7 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
         _stocks = stocks;
         _coins = coins;
         _bankProducts = bankProducts;
+        _loanLiabilities = loanLiabilities;
         _stockPrices = stockPrices;
         _coinPrices = coinPrices;
         _trades = trades;
@@ -233,7 +242,8 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
       ),
       child: const Text(
         '금융자산은 계좌 현금 + 보유 투자상품 평가액 + 예·적금 납입원금으로 계산합니다. '
-            '부동산·대출은 연동 전이므로 전체 순자산과는 다릅니다.',
+            '부동산은 아직 미연동이며, 금융 순자산은 확인된 금융자산에서 '
+            '대출 원금과 발생이자를 차감합니다.',
         style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), height: 1.5),
       ),
     );
@@ -243,6 +253,12 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
     final cash = _cash('bank') + _cash('stock') + _cash('coin');
     final total = cash + _stockValue + _coinValue + _bankPrincipal;
     final gain = (_stockValue - _stockCost) + (_coinValue - _coinCost);
+
+    final debtPrincipal = _number(_loanLiabilities['principal']);
+    final debtInterest = _number(_loanLiabilities['accrued_interest']);
+    final totalDebt = _number(_loanLiabilities['total_debt']);
+
+    final netFinancialAssets = total - totalDebt;
 
     final cards = <Widget>[
       _stat('확인된 금융자산', _pricesComplete ? _won(total) : '시세 미확인',
@@ -266,7 +282,20 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
           valueColor: gain < 0 ? const Color(0xFF2563EB) :
           gain > 0 ? const Color(0xFFDC2626) : null),
       _stat('부동산 자산', '미연동', '매매 기능 개발 후 반영', Icons.home_outlined),
-      _stat('대출·부채', '미연동', '은행 대출 구현 후 반영', Icons.receipt_long_outlined),
+
+      _stat(
+        '대출·부채',
+        _won(totalDebt),
+        '미상환 원금 ${_won(debtPrincipal)} · 발생이자 ${_won(debtInterest)}',
+        Icons.receipt_long_outlined,
+      ),
+      _stat(
+        '금융 순자산',
+        _pricesComplete ? _won(netFinancialAssets) : '시세 미확인',
+        '금융자산 − 대출 원금 − 발생이자 · 부동산 제외',
+        Icons.account_balance_outlined,
+      ),
+
     ];
 
     return LayoutBuilder(
