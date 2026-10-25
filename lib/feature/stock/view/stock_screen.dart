@@ -35,6 +35,7 @@ class _StockScreenState extends State<StockScreen> {
   final StockTradeRepository _stockTradeRepository = StockTradeRepository();
   final StockPriceRepository _stockPriceRepository = StockPriceRepository();
 
+
   // 수정75차: 매수/매도 로직 서비스 분리
   final StockBuyService _stockBuyService = StockBuyService();
   final StockSellService _stockSellService = StockSellService();
@@ -168,7 +169,7 @@ class _StockScreenState extends State<StockScreen> {
     } catch (_) {}
   }
 
-  // 수정87차: 초기 진입 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
+  // 초기 진입 시 시장 데이터를 조회하고 미체결 주문을 처리
   Future<void> _loadInitialData() async {
     await _loadMarketItems();
     await _loadWallet();
@@ -187,11 +188,7 @@ class _StockScreenState extends State<StockScreen> {
     await _loadTradeHistory();
     await _loadPendingOrders();
 
-    try {
-      await _applyNewsOrSimulatePriceUpdate();
-    } catch (e) {
-      debugPrint('가상 거래량 초기 갱신 실패: $e');
-    }
+    
 
     await _loadMarketItems();
     await _loadHoldings();
@@ -216,37 +213,7 @@ class _StockScreenState extends State<StockScreen> {
     });
   }
 
-  // 수정102차: 실제 장중 또는 개발 강제 개장일 때만 주식 가격 갱신
-  Future<void> _applyNewsOrSimulatePriceUpdate() async {
-    final newsResult = await _stockRepository.applyActiveStockNewsEvents(
-      force: _forceStockMarketOpenForDev,
-    );
-
-    final bool success = newsResult['success'] == true;
-    final bool marketOpen = newsResult['market_open'] == true;
-    final bool forceApplied = newsResult['force_applied'] == true;
-
-    final bool canUpdatePrice = marketOpen || forceApplied;
-
-    final int newsCount = ((newsResult['news_count'] ?? 0) as num).toInt();
-    final int stockCount = ((newsResult['stock_count'] ?? 0) as num).toInt();
-
-    if (!canUpdatePrice) {
-      debugPrint('주식 장 마감 상태: 가격 갱신 중지');
-      return;
-    }
-
-    if (success && newsCount > 0 && stockCount > 0) {
-      debugPrint(
-        '활성 뉴스 반복 반영 완료: 뉴스 $newsCount건 / 종목 $stockCount개',
-      );
-      return;
-    }
-
-    await _stockPriceRepository.simulateStockPrices();
-  }
-
-  // 수정87차: 1분 자동 갱신 시 기존 현재가 기준 체결 확인 → 가격 갱신 → 갱신가 기준 체결 재확인
+  // 현실 1분마다 화면 조회 데이터만 갱신 (가격 변경은 서버 전담)
   void _startRealtimePriceUpdate() {
     _realtimePriceTimer?.cancel();
 
@@ -269,14 +236,13 @@ class _StockScreenState extends State<StockScreen> {
           await _loadTradeHistory();
         }
 
-        // 수정87차: 1분 단위 가격/거래량 시뮬레이션 실행
-        await _applyNewsOrSimulatePriceUpdate();
+        // 시세 변동은 서버의 게임 시간 주기 작업에서 처리합니다.
 
         await _loadMarketItems();
         await _loadRecentNewsItems();
         await _loadStockMarketStatus();
 
-        // 수정87차: 가격 변동 후 새로 주문가와 일치한 미체결 주문 재확인
+        // 서버가 갱신한 현재가 기준 미체결 주문 다시 확인
         await _stockTradeRepository.processPendingOrders();
 
         await _loadPendingOrders();

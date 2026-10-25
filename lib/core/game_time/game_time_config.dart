@@ -4,7 +4,7 @@ class GameTimeConfig {
   // 수정53차: MMORPG식 게임 시간 기준
   // 현실 1초 = 게임 1분
   // 현실 1분 = 게임 1시간
-  static const int realSecondsPerGameMinute = 1;
+  static const int realSecondsPerGameMinute = 10;
 
   static const int gameMinutesPerHour = 60;
   static const int gameHoursPerDay = 24;

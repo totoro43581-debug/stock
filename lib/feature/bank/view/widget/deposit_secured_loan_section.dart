@@ -106,7 +106,7 @@ class _DepositSecuredLoanSectionState
         client
             .from('loan_products')
             .select(
-          'id,product_name,annual_rate,min_amount,'
+          'id,bank_id,product_name,annual_rate,min_amount,'
               'max_amount,max_ltv,min_term_game_days,'
               'max_term_game_days',
         )
@@ -115,7 +115,7 @@ class _DepositSecuredLoanSectionState
         client
             .from('user_bank_accounts')
             .select(
-          'id,product_name_snapshot,principal_amount,maturity_at',
+          'id,product_id,product_name_snapshot,principal_amount,maturity_at',
         )
             .eq('status', 'active')
             .eq('product_type', 'deposit'),
@@ -126,8 +126,39 @@ class _DepositSecuredLoanSectionState
       final products =
       List<Map<String, dynamic>>.from(results[0] as List);
 
-      final fetchedDeposits =
-      List<Map<String, dynamic>>.from(results[1] as List);
+
+      // 현재 선택한 대출상품의 소속 은행
+      final String? loanBankId = products.isNotEmpty
+          ? products.first['bank_id']?.toString()
+          : null;
+
+      // 해당 은행에서 발행한 예금상품만 조회
+      final List<Map<String, dynamic>> bankDepositProducts =
+      loanBankId == null
+          ? <Map<String, dynamic>>[]
+          : List<Map<String, dynamic>>.from(
+        await client
+            .from('bank_products')
+            .select('id')
+            .eq('bank_id', loanBankId),
+      );
+
+      // 담보로 인정할 수 있는 예금상품 ID
+      final Set<String> allowedProductIds =
+      bankDepositProducts
+          .map((item) => item['id'].toString())
+          .toSet();
+
+      // 가입 예금 중 같은 은행 상품만 표시
+      final List<Map<String, dynamic>> fetchedDeposits =
+      List<Map<String, dynamic>>.from(
+        results[1] as List,
+      ).where((item) {
+        return allowedProductIds.contains(
+          item['product_id']?.toString(),
+        );
+      }).toList();
+
 
       final fetchedLoans = (results[2] as List)
           .map(
@@ -580,7 +611,9 @@ class _DepositSecuredLoanSectionState
               if (product == null)
                 const Text('현재 신청 가능한 상품이 없습니다.')
               else if (deposits.isEmpty)
-                const Text('담보로 사용할 활성 예금이 없습니다.')
+                const Text(
+                  '해당 은행에 담보로 사용할 활성 예금이 없습니다.',
+                )
               else ...[
                   DropdownButtonFormField<String>(
                     initialValue: selectedDepositId,
@@ -633,15 +666,25 @@ class _DepositSecuredLoanSectionState
                     ),
                   ),
                   const SizedBox(height: 12),
+
                   DropdownButtonFormField<int>(
                     initialValue: effectiveTerm,
+                    isExpanded: true,
+                    menuMaxHeight: 192,
+                    itemHeight: 48,
+                    dropdownColor: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: ink,
+                    ),
                     decoration: const InputDecoration(
                       labelText: '대출기간 (게임 일수)',
                       border: OutlineInputBorder(),
                     ),
                     items: [
                       for (final term in terms)
-                        DropdownMenuItem(
+                        DropdownMenuItem<int>(
                           value: term,
                           child: Text('게임 $term일'),
                         ),
@@ -650,10 +693,12 @@ class _DepositSecuredLoanSectionState
                         ? null
                         : (value) {
                       setState(() {
-                        selectedTerm = value ?? selectedTerm;
+                        selectedTerm =
+                            value ?? selectedTerm;
                       });
                     },
                   ),
+
                   const SizedBox(height: 15),
                   FilledButton(
                     onPressed: !canApply || working
