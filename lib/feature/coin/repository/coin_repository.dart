@@ -1,10 +1,4 @@
-import 'dart:math';
-
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'package:stock/core/game_time/game_time_config.dart';
-import 'package:stock/core/game_time/game_time_service.dart';
 
 import '../../asset_account/repository/asset_account_repository.dart';
 import '../model/coin_holding_model.dart';
@@ -18,8 +12,6 @@ class CoinRepository {
   final AssetAccountRepository _assetAccountRepository =
   AssetAccountRepository();
 
-  final GameTimeService _gameTimeService = const GameTimeService();
-
   // 매수 수수료 없음
   static const double _coinBuyFeeRate = 0.0;
 
@@ -27,11 +19,6 @@ class CoinRepository {
   static const double _coinSellFeeRate = 0.001;
 
   static const double _quantityEpsilon = 0.00000001;
-
-  static const int _coinMarketTickGameMinutes =
-      GameTimeConfig.coinMarketTickGameMinutes;
-
-  static const int _maxCatchUpTickCount = 10;
 
   Future<List<CoinItemModel>> fetchActiveCoins() async {
     return _fetchActiveCoinsRaw();
@@ -166,182 +153,6 @@ class CoinRepository {
     return _assetAccountRepository.fetchAccountCashBalance(
       accountType: 'coin',
     );
-  }
-
-  Future<void> refreshCoinMarketByGameTime() async {
-    await _simulateCoinMarketTickByElapsedGameTime();
-  }
-
-  Future<void> _simulateCoinMarketTickByElapsedGameTime() async {
-    final DateTime now = _gameTimeService.nowUtc();
-
-    final Map<String, dynamic>? state = await _client
-        .from('market_time_state')
-        .select('last_tick_at')
-        .eq('market_type', 'coin')
-        .maybeSingle();
-
-    if (state == null) {
-      await _client.from('market_time_state').insert({
-        'market_type': 'coin',
-        'last_tick_at': now.toIso8601String(),
-        'updated_at': now.toIso8601String(),
-      });
-
-      return;
-    }
-
-    final DateTime lastTickAt =
-        DateTime.tryParse(
-          state['last_tick_at']?.toString() ?? '',
-        )?.toUtc() ??
-            now;
-
-    final int tickCount = _gameTimeService.elapsedMarketTickCount(
-      fromUtc: lastTickAt,
-      toUtc: now,
-      marketGameMinuteInterval: _coinMarketTickGameMinutes,
-      maxTickCount: _maxCatchUpTickCount,
-    );
-
-    if (tickCount <= 0) {
-      return;
-    }
-
-    for (int i = 0; i < tickCount; i++) {
-      debugPrint(
-        '코인 시세 틱 시작: ${i + 1}/$tickCount',
-      );
-
-      try {
-        await _simulateCoinMarketTickOnce();
-
-        debugPrint(
-          '코인 시세 틱 완료: ${i + 1}/$tickCount',
-        );
-      } catch (e) {
-        debugPrint(
-          '코인 시세 틱 실패: ${i + 1}/$tickCount / $e',
-        );
-
-        rethrow;
-      }
-    }
-
-    await _client.from('market_time_state').upsert({
-      'market_type': 'coin',
-      'last_tick_at': now.toIso8601String(),
-      'updated_at': now.toIso8601String(),
-    });
-  }
-
-  Future<void> simulateCoinMarketTick() async {
-    final DateTime now = _gameTimeService.nowUtc();
-
-    await _simulateCoinMarketTickOnce();
-
-    await _client.from('market_time_state').upsert({
-      'market_type': 'coin',
-      'last_tick_at': now.toIso8601String(),
-      'updated_at': now.toIso8601String(),
-    });
-  }
-
-  Future<void> _simulateCoinMarketTickOnce() async {
-    final List<CoinItemModel> coins =
-    await _fetchActiveCoinsRaw();
-
-    final Random random = Random();
-
-    for (final coin in coins) {
-      final double volatilityWeight =
-      _coinVolatilityWeight(
-        coin.currentPrice,
-      );
-
-      final double direction =
-      random.nextDouble() >= 0.5 ? 1 : -1;
-
-      final double baseMovePercent =
-          0.12 + random.nextDouble() * 0.6;
-
-      final bool hasSpike =
-          random.nextDouble() < 0.07;
-
-      final double spikeMovePercent =
-      hasSpike
-          ? random.nextDouble() * 1.2
-          : 0;
-
-      double movePercent =
-          direction *
-              (baseMovePercent + spikeMovePercent) *
-              volatilityWeight;
-
-      movePercent =
-          movePercent.clamp(-2.2, 2.2).toDouble();
-
-      final double moveRate =
-          movePercent / 100;
-
-      double nextPrice =
-          coin.currentPrice * (1 + moveRate);
-
-      if (nextPrice < 1) {
-        nextPrice = 1;
-      }
-
-      nextPrice =
-          _normalizeCoinPrice(nextPrice);
-
-      final double nextChangeRate =
-      (coin.changeRate + movePercent)
-          .clamp(-15.0, 15.0)
-          .toDouble();
-
-      double nextTradeVolume =
-          coin.tradeVolume *
-              (0.985 + random.nextDouble() * 0.03);
-
-      if (nextTradeVolume < 1) {
-        nextTradeVolume = 1;
-      }
-
-      debugPrint(
-        'coin_item update 시작: ${coin.code}',
-      );
-
-      await _client
-          .from('coin_item')
-          .update({
-        'current_price': nextPrice,
-        'change_rate': nextChangeRate,
-        'trade_volume': nextTradeVolume,
-      })
-          .eq('code', coin.code);
-
-      debugPrint(
-        'coin_item update 완료: ${coin.code}',
-      );
-
-      debugPrint(
-        'coin_price_history insert 시작: ${coin.code}',
-      );
-
-      await _client
-          .from('coin_price_history')
-          .insert({
-        'coin_code': coin.code,
-        'coin_name': coin.name,
-        'price': nextPrice,
-        'change_rate': nextChangeRate,
-        'trade_volume': nextTradeVolume,
-      });
-
-      debugPrint(
-        'coin_price_history insert 완료: ${coin.code}',
-      );
-    }
   }
 
   Future<void> buyCoin({
@@ -674,50 +485,6 @@ class CoinRepository {
       memo:
       '${coin.symbol} '
           '${safeQuantity.toStringAsFixed(8)}',
-    );
-  }
-
-  double _coinVolatilityWeight(
-      double price,
-      ) {
-    if (price >= 1000000) {
-      return 0.7;
-    }
-
-    if (price >= 100000) {
-      return 0.85;
-    }
-
-    if (price >= 10000) {
-      return 1.0;
-    }
-
-    if (price >= 1000) {
-      return 1.15;
-    }
-
-    if (price >= 100) {
-      return 1.35;
-    }
-
-    return 1.6;
-  }
-
-  double _normalizeCoinPrice(
-      double value,
-      ) {
-    if (value >= 1000) {
-      return value.roundToDouble();
-    }
-
-    if (value >= 100) {
-      return double.parse(
-        value.toStringAsFixed(1),
-      );
-    }
-
-    return double.parse(
-      value.toStringAsFixed(2),
     );
   }
 
