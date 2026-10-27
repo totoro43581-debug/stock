@@ -972,6 +972,7 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
 
   Map<String, dynamic> _quote = {};
   List<Map<String, dynamic>> _loans = [];
+  DateTime? _gameEpoch;
 
   String? _issueKey;
   String? _repaySignature;
@@ -1034,6 +1035,32 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
+  Future<DateTime?> _loadGameEpoch() async {
+    try {
+      final settings = await _client
+          .from('game_clock_settings')
+          .select('virtual_epoch')
+          .eq('singleton_id', true)
+          .single();
+
+      return DateTime.tryParse(
+        settings['virtual_epoch']?.toString() ?? '',
+      )?.toUtc();
+    } catch (_) {
+      // A date lookup failure must not block loan applications or repayments.
+      return null;
+    }
+  }
+
+  String _gameDate(int gameDay) {
+    final epoch = _gameEpoch;
+    if (epoch == null) return '날짜 확인 불가';
+
+    // get_game_clock defines game_day as whole days since virtual_epoch (day 0).
+    final date = epoch.add(Duration(days: gameDay));
+    return DateFormat('yyyy.MM.dd').format(date.toLocal());
+  }
+
   Future<void> _load() async {
     if (!mounted) return;
 
@@ -1049,6 +1076,7 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
           params: {'p_product_id': widget.productId, 'p_term_game_days': _term},
         ),
         _client.rpc('get_my_credit_loans'),
+        _loadGameEpoch(),
       ]);
 
       if (!mounted) return;
@@ -1063,6 +1091,8 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
                   .map((value) => Map<String, dynamic>.from(value as Map))
                   .toList()
             : [];
+
+        _gameEpoch = result[2] as DateTime?;
 
         _loading = false;
       });
@@ -1376,10 +1406,10 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
           _infoRow('회차 상환액', _won(loan['scheduled_payment'])),
           _infoRow(
             '다음 상환일',
-            '게임 D+$due'
+            '${_gameDate(due)}'
                 '${today > due ? ' · 연체' : ''}',
           ),
-          _infoRow('대출 만기일', '게임 D+$mature'),
+          _infoRow('대출 만기일', _gameDate(mature)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
