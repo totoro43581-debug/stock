@@ -82,18 +82,14 @@ class _CoinScreenState extends State<CoinScreen> {
     _isMarketRefreshing = true;
 
     try {
-      // 게임 시간 기준 시세 갱신
-      await _repository.refreshCoinMarketByGameTime();
-
-      // 현재 코인 가격만 조회
+      // 시세 변경은 서버 전담. 화면 타이머는 가격과 이력을 조회만 합니다.
       final List<CoinItemModel> coins =
       await _repository.fetchActiveCoins();
 
+      final selectedCode = _selectedCoin?.code;
       CoinItemModel? nextSelectedCoin = _selectedCoin;
 
       if (nextSelectedCoin != null) {
-        final String selectedCode = nextSelectedCoin.code;
-
         for (final coin in coins) {
           if (coin.code == selectedCode) {
             nextSelectedCoin = coin;
@@ -104,46 +100,14 @@ class _CoinScreenState extends State<CoinScreen> {
         nextSelectedCoin = coins.first;
       }
 
-      List<CoinPriceHistoryModel> nextPriceHistories =
-      List<CoinPriceHistoryModel>.from(_priceHistories);
-
-      if (nextSelectedCoin != null) {
-        final CoinPriceHistoryModel? lastHistory =
-        nextPriceHistories.isEmpty
-            ? null
-            : nextPriceHistories.last;
-
-        final bool hasPriceChanged =
-            lastHistory == null ||
-                lastHistory.coinCode != nextSelectedCoin.code ||
-                lastHistory.price != nextSelectedCoin.currentPrice ||
-                lastHistory.changeRate != nextSelectedCoin.changeRate ||
-                lastHistory.tradeVolume != nextSelectedCoin.tradeVolume;
-
-        if (hasPriceChanged) {
-          nextPriceHistories.add(
-            CoinPriceHistoryModel(
-              id: 'live-${DateTime.now().microsecondsSinceEpoch}',
+      final nextPriceHistories = nextSelectedCoin == null
+          ? <CoinPriceHistoryModel>[]
+          : await _repository.fetchCoinPriceHistory(
               coinCode: nextSelectedCoin.code,
-              coinName: nextSelectedCoin.name,
-              price: nextSelectedCoin.currentPrice,
-              changeRate: nextSelectedCoin.changeRate,
-              tradeVolume: nextSelectedCoin.tradeVolume,
-              createdAt: DateTime.now(),
-            ),
-          );
-
-          // 화면에서는 최근 100개만 유지
-          if (nextPriceHistories.length > 100) {
-            nextPriceHistories.removeRange(
-              0,
-              nextPriceHistories.length - 100,
+              limit: 100,
             );
-          }
-        }
-      }
 
-      if (!mounted) return;
+      if (!mounted || _selectedCoin?.code != selectedCode) return;
 
       setState(() {
         _coins = coins;
@@ -594,7 +558,7 @@ class _CoinScreenState extends State<CoinScreen> {
         limit: 100,
       );
 
-      if (!mounted) return;
+      if (!mounted || _selectedCoin?.code != coin.code) return;
 
       setState(() {
         _priceHistories = histories;
