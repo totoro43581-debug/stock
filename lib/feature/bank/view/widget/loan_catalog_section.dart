@@ -17,7 +17,7 @@ class LoanCatalogSection extends StatefulWidget {
 
 class _LoanCatalogSectionState extends State<LoanCatalogSection> {
   static const _ink = Color(0xFF111827);
-  static const _muted = Color(0xFF6B7280);
+  static const _muted = Color(0xFF4B5563);
   static const _line = Color(0xFFE5E7EB);
   static const _soft = Color(0xFFF9FAFB);
 
@@ -29,11 +29,15 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
 
   List<Map<String, dynamic>> _offers = [];
   Map<String, dynamic> _overview = {};
+  List<Map<String, dynamic>> _ownedLoans = [];
+  DateTime? _gameEpoch;
+  bool _ownedLoading = true;
+  String? _ownedError;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _refresh();
   }
 
   double _number(dynamic value) {
@@ -84,6 +88,360 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
         _error = e.toString();
       });
     }
+  }
+
+  void _refresh() {
+    _load();
+    _loadOwnedLoans();
+  }
+
+  Future<DateTime?> _readGameEpoch() async {
+    try {
+      final settings = await Supabase.instance.client
+          .from('game_clock_settings')
+          .select('virtual_epoch')
+          .eq('singleton_id', true)
+          .single();
+      return DateTime.tryParse(
+        settings['virtual_epoch']?.toString() ?? '',
+      )?.toUtc();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _loadOwnedLoans() async {
+    setState(() {
+      _ownedLoading = true;
+      _ownedError = null;
+    });
+    try {
+      final client = Supabase.instance.client;
+      final result = await Future.wait<dynamic>([
+        client.rpc('get_my_credit_loans'),
+        client.rpc('get_my_deposit_secured_loans'),
+        _readGameEpoch(),
+      ]);
+      if (!mounted) return;
+      // A missing or malformed response is not proof that there are no loans.
+      if (result[0] is! List || result[1] is! List) {
+        throw const FormatException('대출 목록 응답을 확인할 수 없습니다.');
+      }
+      final loans = <Map<String, dynamic>>[
+        for (var i = 0; i < 2; i++)
+          for (final item in result[i] as List)
+            {
+              ...Map<String, dynamic>.from(item as Map),
+              '_kind': i == 0 ? 'credit' : 'deposit_secured',
+            },
+      ];
+      setState(() {
+        _ownedLoans = loans;
+        _gameEpoch = result[2] as DateTime?;
+        _ownedLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _ownedError = '내 대출을 불러오지 못했습니다. 잠시 후 다시 조회해 주세요.';
+        _ownedLoading = false;
+      });
+    }
+  }
+
+  String _ownedDate(dynamic day) {
+    final value = int.tryParse(day?.toString() ?? '');
+    if (_gameEpoch == null || value == null) return '날짜 확인 불가';
+    return DateFormat(
+      'yyyy.MM.dd',
+    ).format(_gameEpoch!.add(Duration(days: value)).toLocal());
+  }
+
+  Widget _loanMetric(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 14, color: _muted, height: 1.5),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: _ink,
+            height: 1.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _ownedLoanCard(Map<String, dynamic> loan) {
+    final credit = loan['_kind'] == 'credit';
+    final overdue = loan['status'] == 'overdue';
+    final dueToday =
+        credit &&
+        loan['game_day'] != null &&
+        loan['game_day'] == loan['next_payment_game_day'];
+    final status = overdue
+        ? '연체'
+        : dueToday
+        ? '오늘 상환'
+        : '이용 중';
+    final statusColor = overdue
+        ? const Color(0xFFB42318)
+        : const Color(0xFF1D4ED8);
+    final name =
+        loan['product_name']?.toString() ?? (credit ? '생활 신용대출' : '예금담보대출');
+    final total = credit
+        ? loan['total_repayment_amount']
+        : loan['full_repayment_amount'];
+    final interest = credit ? loan['interest_due'] : loan['accrued_interest'];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: _ink,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            credit ? '신용대출' : '예금담보대출',
+            style: const TextStyle(fontSize: 14, color: _muted),
+          ),
+          const SizedBox(height: 18),
+          const Text('잔여 원금', style: TextStyle(fontSize: 14, color: _muted)),
+          const SizedBox(height: 4),
+          Text(
+            _won(loan['outstanding_principal']),
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+            ),
+          ),
+          const SizedBox(height: 18),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final count = constraints.maxWidth >= 900
+                  ? 4
+                  : constraints.maxWidth >= 440
+                  ? 2
+                  : 1;
+              final width = (constraints.maxWidth - (count - 1) * 20) / count;
+              final metrics = [
+                _loanMetric('발생 이자', _won(interest)),
+                _loanMetric('전체 상환 예상액', _won(total)),
+                if (credit)
+                  _loanMetric(
+                    '다음 상환일 · 게임 날짜',
+                    _ownedDate(loan['next_payment_game_day']),
+                  )
+                else
+                  _loanMetric(
+                    '대출금리',
+                    loan['annual_rate'] == null
+                        ? '확인 필요'
+                        : '연 ${_number(loan['annual_rate']).toStringAsFixed(2)}%',
+                  ),
+                _loanMetric(
+                  '만기일 · 게임 날짜',
+                  _ownedDate(loan['maturity_game_day']),
+                ),
+              ];
+              return Wrap(
+                spacing: 20,
+                runSpacing: 16,
+                children: [
+                  for (final metric in metrics)
+                    SizedBox(width: width, child: metric),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+          const Divider(height: 1, color: _line),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 20,
+              runSpacing: 12,
+              children: [
+                const Text(
+                  '상환금은 생활계좌에서 출금됩니다.',
+                  style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
+                ),
+                FilledButton.icon(
+                  onPressed: () => _showLoanDetails({
+                    'id': loan['product_id'],
+                    'product_code': credit
+                        ? 'LOAN_CREDIT_BASIC'
+                        : 'LOAN_DEPOSIT_SECURED',
+                    'is_active': true,
+                  }, loanId: loan['id'].toString()),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _ink,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(136, 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                  ),
+                  icon: const Icon(Icons.receipt_long_outlined, size: 20),
+                  label: const Text(
+                    '상환·관리',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ownedSection() {
+    return _surface(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '내 대출',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _ownedLoading ? null : _loadOwnedLoans,
+                icon: const Icon(Icons.refresh),
+                tooltip: '내 대출 새로고침',
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '이용 중인 대출과 상환 일정을 확인하고 관리하세요.',
+            style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
+          ),
+          const SizedBox(height: 20),
+          if (_ownedLoading)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_ownedError != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _ownedError!,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: _muted,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _loadOwnedLoans,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('내 대출 다시 조회'),
+                ),
+              ],
+            )
+          else if (_ownedLoans.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: _soft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.account_balance_outlined, size: 32, color: _muted),
+                  SizedBox(height: 12),
+                  Text(
+                    '이용 중인 대출이 없습니다.',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: _ink,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '아래 대출 상품에서 조건을 확인할 수 있습니다.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            for (var i = 0; i < _ownedLoans.length; i++) ...[
+              if (i > 0) const SizedBox(height: 14),
+              _ownedLoanCard(_ownedLoans[i]),
+            ],
+            const SizedBox(height: 12),
+            const Text(
+              '이자와 상환 예상액은 조회 시점 기준이며, 실제 상환 시 서버에서 다시 계산합니다.',
+              style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   String _loanType(String type) {
@@ -332,7 +690,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 12, color: _muted)),
+          Text(title, style: const TextStyle(fontSize: 14, color: _muted)),
           const SizedBox(height: 8),
           Text(
             value,
@@ -362,7 +720,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
             children: [
               const Expanded(
                 child: Text(
-                  '내 대출·심사 현황',
+                  '대출 요약·신용정보',
                   style: TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.w900,
@@ -371,7 +729,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                 ),
               ),
               IconButton(
-                onPressed: _load,
+                onPressed: _refresh,
                 icon: const Icon(Icons.refresh),
                 tooltip: '새로고침',
               ),
@@ -421,7 +779,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
           const Text(
             '대출 심사 시점과 실제 대출 실행 시점의 '
             '조건은 달라질 수 있습니다.',
-            style: TextStyle(fontSize: 12, color: _muted),
+            style: TextStyle(fontSize: 14, color: _muted),
           ),
         ],
       ),
@@ -433,19 +791,22 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         '$label  $value',
-        style: const TextStyle(fontSize: 12, color: _ink, height: 1.4),
+        style: const TextStyle(fontSize: 14, color: _ink, height: 1.4),
       ),
     );
   }
 
-  Future<void> _showLoanDetails(Map<String, dynamic> offer) async {
+  Future<void> _showLoanDetails(
+    Map<String, dynamic> offer, {
+    String? loanId,
+  }) async {
     if (!mounted) return;
 
     final isDeposit = offer['product_code'] == 'LOAN_DEPOSIT_SECURED';
 
     final canOpen = _supported(offer);
 
-    bool showingApplication = false;
+    bool showingApplication = loanId != null;
 
     await showDialog<void>(
       context: context,
@@ -468,7 +829,11 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                       Expanded(
                         child: Text(
                           showingApplication
-                              ? (isDeposit ? '예금담보대출 신청·상환' : '생활 신용대출 신청·상환')
+                              ? (loanId != null
+                                    ? '대출 상환·관리'
+                                    : (isDeposit
+                                          ? '예금담보대출 신청·상환'
+                                          : '생활 신용대출 신청·상환'))
                               : '대출상품 상세',
                           style: const TextStyle(
                             fontSize: 18,
@@ -492,20 +857,24 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                     child: showingApplication
                         ? (isDeposit
                               ? DepositSecuredLoanSection(
+                                  manageOnly: loanId != null,
+                                  loanId: loanId,
                                   onChanged: () {
                                     Navigator.of(dialogContext).pop();
 
                                     if (mounted) {
-                                      _load();
+                                      _refresh();
                                       widget.onChanged?.call();
                                     }
                                   },
                                 )
                               : _BasicCreditLoanSection(
                                   productId: offer['id'].toString(),
+                                  manageOnly: loanId != null,
+                                  loanId: loanId,
                                   onChanged: () {
                                     if (mounted) {
-                                      _load();
+                                      _refresh();
                                       widget.onChanged?.call();
                                     }
                                   },
@@ -516,7 +885,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                               Text(
                                 offer['bank_name']?.toString() ?? '',
                                 style: const TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 14,
                                   color: _muted,
                                 ),
                               ),
@@ -532,7 +901,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                               Text(
                                 _loanType(offer['loan_type']?.toString() ?? ''),
                                 style: const TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   color: _muted,
                                 ),
                               ),
@@ -579,7 +948,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                               Text(
                                 _earlyRepayment(offer),
                                 style: const TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   color: _muted,
                                 ),
                               ),
@@ -604,7 +973,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                                   offer['precheck_status']?.toString(),
                                 ),
                                 style: const TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 14,
                                   color: _muted,
                                 ),
                               ),
@@ -692,7 +1061,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                       bank,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: _muted),
+                      style: const TextStyle(fontSize: 14, color: _muted),
                     ),
                   ),
                   const Icon(Icons.chevron_right, size: 17, color: _muted),
@@ -733,7 +1102,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                       children: [
                         const Text(
                           '최대한도',
-                          style: TextStyle(fontSize: 10, color: _muted),
+                          style: TextStyle(fontSize: 14, color: _muted),
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -741,7 +1110,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: 14,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -754,7 +1123,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                       children: [
                         const Text(
                           '대출기간',
-                          style: TextStyle(fontSize: 10, color: _muted),
+                          style: TextStyle(fontSize: 14, color: _muted),
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -763,7 +1132,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: 14,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -780,14 +1149,14 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                       _repayment(offer['repayment_method']?.toString() ?? ''),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: _muted),
+                      style: const TextStyle(fontSize: 14, color: _muted),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     _cardStatus(offer),
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: available ? _ink : _muted,
                     ),
@@ -828,7 +1197,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
           Text(
             '전체 ${_offers.length}개 상품 · '
             '가심사 결과는 최종 승인이 아닙니다.',
-            style: const TextStyle(fontSize: 12, color: _muted),
+            style: const TextStyle(fontSize: 14, color: _muted),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -859,13 +1228,11 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
             builder: (context, constraints) {
               final width = constraints.maxWidth;
 
-              final count = width >= 1100
-                  ? 5
-                  : width >= 850
+              final count = width >= 1160
                   ? 4
-                  : width >= 620
+                  : width >= 860
                   ? 3
-                  : width >= 400
+                  : width >= 560
                   ? 2
                   : 1;
 
@@ -893,6 +1260,17 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ownedSection(),
+        const SizedBox(height: 20),
+        _catalogContent(context),
+      ],
+    );
+  }
+
+  Widget _catalogContent(BuildContext context) {
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.all(30),
@@ -931,7 +1309,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
             '※ 예금담보대출과 생활 신용대출은 신청·상환 '
             '화면을 제공합니다. 그 외 대출은 준비 중이며 '
             '최종 승인 여부는 실행 시 재심사합니다.',
-            style: TextStyle(fontSize: 12, color: _muted, height: 1.5),
+            style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
           ),
         ),
       ],
@@ -944,9 +1322,16 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
 
 class _BasicCreditLoanSection extends StatefulWidget {
   final String productId;
+  final bool manageOnly;
+  final String? loanId;
   final VoidCallback? onChanged;
 
-  const _BasicCreditLoanSection({required this.productId, this.onChanged});
+  const _BasicCreditLoanSection({
+    required this.productId,
+    this.onChanged,
+    this.manageOnly = false,
+    this.loanId,
+  });
 
   @override
   State<_BasicCreditLoanSection> createState() =>
@@ -955,7 +1340,7 @@ class _BasicCreditLoanSection extends StatefulWidget {
 
 class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
   static const _ink = Color(0xFF111827);
-  static const _muted = Color(0xFF6B7280);
+  static const _muted = Color(0xFF4B5563);
   static const _line = Color(0xFFE5E7EB);
   static const _soft = Color(0xFFF9FAFB);
 
@@ -1071,15 +1456,24 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
 
     try {
       final result = await Future.wait<dynamic>([
-        _client.rpc(
-          'get_my_credit_loan_quote',
-          params: {'p_product_id': widget.productId, 'p_term_game_days': _term},
-        ),
+        widget.manageOnly
+            ? Future<dynamic>.value(<String, dynamic>{})
+            : _client.rpc(
+                'get_my_credit_loan_quote',
+                params: {
+                  'p_product_id': widget.productId,
+                  'p_term_game_days': _term,
+                },
+              ),
         _client.rpc('get_my_credit_loans'),
         _loadGameEpoch(),
       ]);
 
       if (!mounted) return;
+
+      if (result[1] is! List) {
+        throw const FormatException('대출 목록 응답을 확인할 수 없습니다.');
+      }
 
       setState(() {
         _quote = result[0] is Map
@@ -1089,6 +1483,11 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
         _loans = result[1] is List
             ? (result[1] as List)
                   .map((value) => Map<String, dynamic>.from(value as Map))
+                  .where(
+                    (loan) =>
+                        widget.loanId == null ||
+                        loan['id'].toString() == widget.loanId,
+                  )
                   .toList()
             : [];
 
@@ -1363,13 +1762,17 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
             width: 120,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: _muted),
+              style: const TextStyle(fontSize: 14, color: _muted),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: _ink,
+              ),
             ),
           ),
         ],
@@ -1397,7 +1800,11 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
         children: [
           Text(
             loan['product_name']?.toString() ?? '생활 신용대출',
-            style: const TextStyle(fontWeight: FontWeight.w900, color: _ink),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+            ),
           ),
           const SizedBox(height: 10),
           _infoRow('잔여 원금', _won(loan['outstanding_principal'])),
@@ -1471,9 +1878,9 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '내 생활 신용대출',
-          style: TextStyle(
+        Text(
+          widget.manageOnly ? '생활 신용대출 상환' : '내 생활 신용대출',
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w900,
             color: _ink,
@@ -1484,94 +1891,96 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
         if (_loans.isEmpty)
           const Text(
             '현재 이용 중인 신용대출이 없습니다.',
-            style: TextStyle(fontSize: 13, color: _muted),
+            style: TextStyle(fontSize: 14, color: _muted),
           )
         else
           for (final loan in _loans) _loanCard(loan),
 
-        const Divider(height: 30, color: _line),
+        if (!widget.manageOnly) ...[
+          const Divider(height: 30, color: _line),
 
-        const Text(
-          '신규 신용대출 신청',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            color: _ink,
+          const Text(
+            '신규 신용대출 신청',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: _ink,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+          const SizedBox(height: 12),
 
-        _infoRow('게임 신용점수', '${_quote['credit_score'] ?? '-'}점'),
-        _infoRow('대출금리', '연 ${_quote['annual_rate'] ?? '-'}%'),
-        _infoRow('예상 승인한도', _won(maximum)),
-        _infoRow('최소 신청금액', _won(minimum)),
+          _infoRow('게임 신용점수', '${_quote['credit_score'] ?? '-'}점'),
+          _infoRow('대출금리', '연 ${_quote['annual_rate'] ?? '-'}%'),
+          _infoRow('예상 승인한도', _won(maximum)),
+          _infoRow('최소 신청금액', _won(minimum)),
 
-        Text(
-          _status(_quote['status']?.toString()),
-          style: const TextStyle(fontSize: 12, color: _muted, height: 1.5),
-        ),
-
-        const SizedBox(height: 14),
-
-        const Text(
-          '대출기간 (게임 기준)',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final days in const [30, 60, 90, 120, 150, 180])
-              ChoiceChip(
-                label: Text('${days ~/ 30}개월'),
-                selected: _term == days,
-                onSelected: _busy
-                    ? null
-                    : (selected) {
-                        if (!selected) return;
-
-                        _term = days;
-                        _issueKey = null;
-                        _load();
-                      },
-                showCheckmark: false,
-              ),
-          ],
-        ),
-
-        const SizedBox(height: 14),
-
-        TextField(
-          controller: _amountController,
-          enabled: available && !_busy,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: InputDecoration(
-            labelText: '신청금액 (원)',
-            hintText: available ? '최대 ${_won(maximum)}' : '현재 신청할 수 없습니다',
-            border: const OutlineInputBorder(),
+          Text(
+            _status(_quote['status']?.toString()),
+            style: const TextStyle(fontSize: 14, color: _muted, height: 1.5),
           ),
-        ),
 
-        const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-        FilledButton(
-          onPressed: available && !_busy ? _issue : null,
-          style: FilledButton.styleFrom(backgroundColor: _ink),
-          child: Text(_busy ? '처리 중...' : '신용대출 신청 및 실행'),
-        ),
+          const Text(
+            '대출기간 (게임 기준)',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
 
-        const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final days in const [30, 60, 90, 120, 150, 180])
+                ChoiceChip(
+                  label: Text('${days ~/ 30}개월'),
+                  selected: _term == days,
+                  onSelected: _busy
+                      ? null
+                      : (selected) {
+                          if (!selected) return;
 
-        const Text(
-          '직업·급여는 필수가 아닙니다. '
-          '게임 신용점수, 기존 대출 및 연체 이력, '
-          '검증된 현금흐름으로 대출 한도를 계산합니다. '
-          '실행 시 조건을 재검증합니다.',
-          style: TextStyle(fontSize: 12, color: _muted, height: 1.5),
-        ),
+                          _term = days;
+                          _issueKey = null;
+                          _load();
+                        },
+                  showCheckmark: false,
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          TextField(
+            controller: _amountController,
+            enabled: available && !_busy,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              labelText: '신청금액 (원)',
+              hintText: available ? '최대 ${_won(maximum)}' : '현재 신청할 수 없습니다',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          FilledButton(
+            onPressed: available && !_busy ? _issue : null,
+            style: FilledButton.styleFrom(backgroundColor: _ink),
+            child: Text(_busy ? '처리 중...' : '신용대출 신청 및 실행'),
+          ),
+
+          const SizedBox(height: 12),
+
+          const Text(
+            '직업·급여는 필수가 아닙니다. '
+            '게임 신용점수, 기존 대출 및 연체 이력, '
+            '검증된 현금흐름으로 대출 한도를 계산합니다. '
+            '실행 시 조건을 재검증합니다.',
+            style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
+          ),
+        ],
       ],
     );
   }

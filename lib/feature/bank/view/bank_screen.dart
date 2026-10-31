@@ -631,7 +631,7 @@ class _BankScreenState extends State<BankScreen> {
           Text(
             subtitle,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: _muted,
             ),
           ),

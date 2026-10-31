@@ -1,4 +1,3 @@
-
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -8,10 +7,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DepositSecuredLoanSection extends StatefulWidget {
   final VoidCallback? onChanged;
+  final bool manageOnly;
+  final String? loanId;
 
   const DepositSecuredLoanSection({
     super.key,
     this.onChanged,
+    this.manageOnly = false,
+    this.loanId,
   });
 
   @override
@@ -19,10 +22,9 @@ class DepositSecuredLoanSection extends StatefulWidget {
       _DepositSecuredLoanSectionState();
 }
 
-class _DepositSecuredLoanSectionState
-    extends State<DepositSecuredLoanSection> {
+class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
   static const ink = Color(0xFF111827);
-  static const muted = Color(0xFF6B7280);
+  static const muted = Color(0xFF4B5563);
   static const line = Color(0xFFE5E7EB);
 
   final client = Supabase.instance.client;
@@ -38,6 +40,7 @@ class _DepositSecuredLoanSectionState
 
   List<Map<String, dynamic>> deposits = [];
   List<Map<String, dynamic>> loans = [];
+  DateTime? gameEpoch;
 
   String? selectedDepositId;
   int selectedTerm = 10;
@@ -66,10 +69,7 @@ class _DepositSecuredLoanSectionState
 
   String newRequestKey() {
     final random = Random.secure();
-    final bytes = List<int>.generate(
-      16,
-          (_) => random.nextInt(256),
-    );
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
 
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -102,30 +102,50 @@ class _DepositSecuredLoanSectionState
     });
 
     try {
+      if (widget.manageOnly) {
+        final results = await Future.wait<dynamic>([
+          client.rpc('get_my_deposit_secured_loans'),
+          readGameEpoch(),
+        ]);
+        if (results[0] is! List) {
+          throw const FormatException('대출 목록 응답을 확인할 수 없습니다.');
+        }
+        if (!mounted) return;
+        setState(() {
+          loans = (results[0] as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .where(
+                (loan) =>
+                    widget.loanId == null ||
+                    loan['id'].toString() == widget.loanId,
+              )
+              .toList();
+          gameEpoch = results[1] as DateTime?;
+          loading = false;
+        });
+        return;
+      }
       final results = await Future.wait<dynamic>([
         client
             .from('loan_products')
             .select(
-          'id,bank_id,product_name,annual_rate,min_amount,'
+              'id,bank_id,product_name,annual_rate,min_amount,'
               'max_amount,max_ltv,min_term_game_days,'
               'max_term_game_days',
-        )
+            )
             .eq('product_code', 'LOAN_DEPOSIT_SECURED')
             .eq('is_active', true),
         client
             .from('user_bank_accounts')
-            .select(
-          '*',
-        )
+            .select('*')
             .eq('status', 'active')
             .eq('product_type', 'deposit'),
         client.rpc('get_my_deposit_secured_loans'),
         client.rpc('get_game_clock'),
+        readGameEpoch(),
       ]);
 
-      final products =
-      List<Map<String, dynamic>>.from(results[0] as List);
-
+      final products = List<Map<String, dynamic>>.from(results[0] as List);
 
       // 현재 선택한 대출상품의 소속 은행
       final String? loanBankId = products.isNotEmpty
@@ -133,41 +153,31 @@ class _DepositSecuredLoanSectionState
           : null;
 
       // 해당 은행에서 발행한 예금상품만 조회
-      final List<Map<String, dynamic>> bankDepositProducts =
-      loanBankId == null
+      final List<Map<String, dynamic>> bankDepositProducts = loanBankId == null
           ? <Map<String, dynamic>>[]
           : List<Map<String, dynamic>>.from(
-        await client
-            .from('bank_products')
-            .select('id')
-            .eq('bank_id', loanBankId),
-      );
+              await client
+                  .from('bank_products')
+                  .select('id')
+                  .eq('bank_id', loanBankId),
+            );
 
       // 담보로 인정할 수 있는 예금상품 ID
-      final Set<String> allowedProductIds =
-      bankDepositProducts
+      final Set<String> allowedProductIds = bankDepositProducts
           .map((item) => item['id'].toString())
           .toSet();
 
       // 가입 예금 중 같은 은행 상품만 표시
       final List<Map<String, dynamic>> fetchedDeposits =
-      List<Map<String, dynamic>>.from(
-        results[1] as List,
-      ).where((item) {
-        return allowedProductIds.contains(
-          item['product_id']?.toString(),
-        );
-      }).toList();
-
+          List<Map<String, dynamic>>.from(results[1] as List).where((item) {
+            return allowedProductIds.contains(item['product_id']?.toString());
+          }).toList();
 
       final fetchedLoans = (results[2] as List)
-          .map(
-            (item) => Map<String, dynamic>.from(item as Map),
-      )
+          .map((item) => Map<String, dynamic>.from(item as Map))
           .toList();
 
-      final fetchedClock =
-      Map<String, dynamic>.from(results[3] as Map);
+      final fetchedClock = Map<String, dynamic>.from(results[3] as Map);
 
       if (!mounted) return;
 
@@ -176,12 +186,12 @@ class _DepositSecuredLoanSectionState
         deposits = fetchedDeposits;
         loans = fetchedLoans;
         clock = fetchedClock;
+        gameEpoch = results[4] as DateTime?;
 
-        if (!deposits.any(
-              (item) => item['id'] == selectedDepositId,
-        )) {
-          selectedDepositId =
-          deposits.isEmpty ? null : deposits.first['id'].toString();
+        if (!deposits.any((item) => item['id'] == selectedDepositId)) {
+          selectedDepositId = deposits.isEmpty
+              ? null
+              : deposits.first['id'].toString();
         }
 
         loading = false;
@@ -196,6 +206,29 @@ class _DepositSecuredLoanSectionState
     }
   }
 
+  Future<DateTime?> readGameEpoch() async {
+    try {
+      final settings = await client
+          .from('game_clock_settings')
+          .select('virtual_epoch')
+          .eq('singleton_id', true)
+          .single();
+      return DateTime.tryParse(
+        settings['virtual_epoch']?.toString() ?? '',
+      )?.toUtc();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String gameDate(dynamic day) {
+    final value = int.tryParse(day?.toString() ?? '');
+    if (gameEpoch == null || value == null) return '날짜 확인 불가';
+    return DateFormat(
+      'yyyy.MM.dd',
+    ).format(gameEpoch!.add(Duration(days: value)).toLocal());
+  }
+
   Map<String, dynamic>? get selectedDeposit {
     for (final item in deposits) {
       if (item['id'] == selectedDepositId) {
@@ -206,9 +239,7 @@ class _DepositSecuredLoanSectionState
   }
 
   bool get depositIsPledged {
-    return loans.any(
-          (loan) => loan['deposit_account_id'] == selectedDepositId,
-    );
+    return loans.any((loan) => loan['deposit_account_id'] == selectedDepositId);
   }
 
   double get availableLimit {
@@ -247,11 +278,9 @@ class _DepositSecuredLoanSectionState
     if (currentTime == null) return [];
     final remainingSeconds = maturity.difference(currentTime).inSeconds;
 
-    final minimum =
-    number(product!['min_term_game_days']).toInt();
+    final minimum = number(product!['min_term_game_days']).toInt();
 
-    final maximum =
-    number(product!['max_term_game_days']).toInt();
+    final maximum = number(product!['max_term_game_days']).toInt();
 
     const options = [10, 30, 60, 90, 180, 365];
 
@@ -262,10 +291,7 @@ class _DepositSecuredLoanSectionState
     }).toList();
   }
 
-  Future<bool> confirm(
-      String title,
-      String content,
-      ) async {
+  Future<bool> confirm(String title, String content) async {
     final answer = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -275,13 +301,11 @@ class _DepositSecuredLoanSectionState
           content: Text(content),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, false),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('취소'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, true),
+              onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('확인'),
             ),
           ],
@@ -293,9 +317,7 @@ class _DepositSecuredLoanSectionState
   }
 
   Future<void> issueLoan() async {
-    if (working ||
-        product == null ||
-        selectedDeposit == null) {
+    if (working || product == null || selectedDeposit == null) {
       return;
     }
 
@@ -305,9 +327,7 @@ class _DepositSecuredLoanSectionState
     if (amount == null ||
         amount < number(product!['min_amount']) ||
         amount > availableLimit) {
-      message(
-        '최소 신청금액과 예금담보 대출한도를 확인해 주세요.',
-      );
+      message('최소 신청금액과 예금담보 대출한도를 확인해 주세요.');
       return;
     }
 
@@ -317,8 +337,7 @@ class _DepositSecuredLoanSectionState
     }
 
     final rate = number(product!['annual_rate']);
-    final expectedInterest =
-    (amount * rate / 100 * selectedTerm / 365).ceil();
+    final expectedInterest = (amount * rate / 100 * selectedTerm / 365).ceil();
 
     final approved = await confirm(
       '예금담보대출 실행',
@@ -354,9 +373,7 @@ class _DepositSecuredLoanSectionState
       await load();
       widget.onChanged?.call();
 
-      message(
-        '대출 실행 완료: ${won((result as Map)['principal_amount'])}',
-      );
+      message('대출 실행 완료: ${won((result as Map)['principal_amount'])}');
     } catch (e) {
       if (!mounted) return;
       message('대출 실행 실패: $e');
@@ -367,9 +384,9 @@ class _DepositSecuredLoanSectionState
   }
 
   Future<void> repayLoan(
-      Map<String, dynamic> loan, {
-        required bool full,
-      }) async {
+    Map<String, dynamic> loan, {
+    required bool full,
+  }) async {
     if (working) return;
 
     double? paymentAmount;
@@ -385,9 +402,7 @@ class _DepositSecuredLoanSectionState
           content: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-            ],
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: const InputDecoration(
               labelText: '상환금액',
               border: OutlineInputBorder(),
@@ -421,10 +436,10 @@ class _DepositSecuredLoanSectionState
       full ? '대출 전액상환' : '대출 일부상환',
       full
           ? '표시된 예상 상환액은 ${won(loan['full_repayment_amount'])}입니다.\n'
-          '최종 금액은 실행 시점의 게임 이자로 다시 계산됩니다.\n'
-          '생활계좌에서 상환하시겠습니까?'
+                '최종 금액은 실행 시점의 게임 이자로 다시 계산됩니다.\n'
+                '생활계좌에서 상환하시겠습니까?'
           : '${won(paymentAmount)}을 생활계좌에서 상환하시겠습니까?\n'
-          '미납 이자가 있으면 이자부터 충당됩니다.',
+                '미납 이자가 있으면 이자부터 충당됩니다.',
     );
 
     if (!approved || !mounted) return;
@@ -445,9 +460,7 @@ class _DepositSecuredLoanSectionState
       await load();
       widget.onChanged?.call();
 
-      message(
-        '상환 완료: ${won((result as Map)['payment'])}',
-      );
+      message('상환 완료: ${won((result as Map)['payment'])}');
     } catch (e) {
       if (!mounted) return;
       message('상환 실패: $e');
@@ -498,21 +511,49 @@ class _DepositSecuredLoanSectionState
         children: [
           Text(
             loan['product_name']?.toString() ?? '예금담보대출',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 20,
-            runSpacing: 8,
-            children: [
-              Text('잔여 원금 ${won(loan['outstanding_principal'])}'),
-              Text('발생 이자 ${won(loan['accrued_interest'])}'),
-              Text('전체 상환액 ${won(loan['full_repayment_amount'])}'),
-              Text('게임 만기 D+${loan['maturity_game_day']}'),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth >= 440
+                  ? (constraints.maxWidth - 20) / 2
+                  : constraints.maxWidth;
+              final details = <(String, String)>[
+                ('잔여 원금', won(loan['outstanding_principal'])),
+                ('발생 이자', won(loan['accrued_interest'])),
+                ('전체 상환 예상액', won(loan['full_repayment_amount'])),
+                ('만기일 · 게임 날짜', gameDate(loan['maturity_game_day'])),
+              ];
+              return Wrap(
+                spacing: 20,
+                runSpacing: 16,
+                children: [
+                  for (final (label, value) in details)
+                    SizedBox(
+                      width: width,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            label,
+                            style: const TextStyle(fontSize: 14, color: muted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            value,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -520,15 +561,11 @@ class _DepositSecuredLoanSectionState
             runSpacing: 8,
             children: [
               OutlinedButton(
-                onPressed: working
-                    ? null
-                    : () => repayLoan(loan, full: false),
+                onPressed: working ? null : () => repayLoan(loan, full: false),
                 child: const Text('일부상환'),
               ),
               FilledButton(
-                onPressed: working
-                    ? null
-                    : () => repayLoan(loan, full: true),
+                onPressed: working ? null : () => repayLoan(loan, full: true),
                 child: const Text('전액상환'),
               ),
             ],
@@ -543,9 +580,7 @@ class _DepositSecuredLoanSectionState
     if (loading) {
       return const Padding(
         padding: EdgeInsets.all(30),
-        child: Center(
-          child: CircularProgressIndicator(color: ink),
-        ),
+        child: Center(child: CircularProgressIndicator(color: ink)),
       );
     }
 
@@ -555,28 +590,34 @@ class _DepositSecuredLoanSectionState
         Column(
           children: [
             Text(error!),
-            OutlinedButton(
-              onPressed: load,
-              child: const Text('다시 조회'),
-            ),
+            OutlinedButton(onPressed: load, child: const Text('다시 조회')),
           ],
         ),
       );
     }
 
     final terms = validTerms;
-    final effectiveTerm =
-    terms.contains(selectedTerm)
+    final effectiveTerm = terms.contains(selectedTerm)
         ? selectedTerm
         : terms.isEmpty
         ? null
         : terms.first;
 
-    final canApply = product != null &&
+    final canApply =
+        product != null &&
         selectedDeposit != null &&
         !depositIsPledged &&
         availableLimit >= number(product!['min_amount']) &&
         effectiveTerm != null;
+
+    if (widget.manageOnly) {
+      return _panel(
+        '예금담보대출 상환',
+        loans.isEmpty
+            ? const Text('현재 이용 중인 예금담보대출이 없습니다.')
+            : Column(children: [for (final loan in loans) _loanCard(loan)]),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -585,14 +626,10 @@ class _DepositSecuredLoanSectionState
           '내 예금담보대출',
           loans.isEmpty
               ? const Text(
-            '현재 이용 중인 예금담보대출이 없습니다.',
-            style: TextStyle(color: muted),
-          )
-              : Column(
-            children: [
-              for (final loan in loans) _loanCard(loan),
-            ],
-          ),
+                  '현재 이용 중인 예금담보대출이 없습니다.',
+                  style: TextStyle(color: muted),
+                )
+              : Column(children: [for (final loan in loans) _loanCard(loan)]),
         ),
         const SizedBox(height: 14),
         _panel(
@@ -602,119 +639,103 @@ class _DepositSecuredLoanSectionState
             children: [
               const Text(
                 '가입 중인 예금을 담보로 생활계좌에 자금을 '
-                    '입금받습니다. 대출한도는 해당 예금 원금의 '
-                    '최대 90%이며, 이 상품은 중도상환수수료가 없습니다.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: muted,
-                  height: 1.5,
-                ),
+                '입금받습니다. 대출한도는 해당 예금 원금의 '
+                '최대 90%이며, 이 상품은 중도상환수수료가 없습니다.',
+                style: TextStyle(fontSize: 14, color: muted, height: 1.5),
               ),
               const SizedBox(height: 16),
               if (product == null)
                 const Text('현재 신청 가능한 상품이 없습니다.')
               else if (deposits.isEmpty)
-                const Text(
-                  '해당 은행에 담보로 사용할 활성 예금이 없습니다.',
-                )
+                const Text('해당 은행에 담보로 사용할 활성 예금이 없습니다.')
               else ...[
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedDepositId,
-                    decoration: const InputDecoration(
-                      labelText: '담보 예금',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final item in deposits)
-                        DropdownMenuItem(
-                          value: item['id'].toString(),
-                          child: Text(
-                            '${item['product_name_snapshot']} '
-                                '· ${won(item['principal_amount'])}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedDepositId,
+                  decoration: const InputDecoration(
+                    labelText: '담보 예금',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final item in deposits)
+                      DropdownMenuItem(
+                        value: item['id'].toString(),
+                        child: Text(
+                          '${item['product_name_snapshot']} '
+                          '· ${won(item['principal_amount'])}',
+                          overflow: TextOverflow.ellipsis,
                         ),
-                    ],
-                    onChanged: working
-                        ? null
-                        : (value) {
-                      setState(() {
-                        selectedDepositId = value;
-                      });
-                    },
+                      ),
+                  ],
+                  onChanged: working
+                      ? null
+                      : (value) {
+                          setState(() {
+                            selectedDepositId = value;
+                          });
+                        },
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  depositIsPledged
+                      ? '이미 대출 담보로 사용 중인 예금입니다.'
+                      : '현재 담보 기준 최대 ${won(availableLimit)}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: amountController,
+                  enabled: canApply && !working,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: '신청금액 (원)',
+                    hintText: canApply
+                        ? '최대 ${won(availableLimit)}'
+                        : '대출 조건을 확인하세요',
+                    border: const OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    depositIsPledged
-                        ? '이미 대출 담보로 사용 중인 예금입니다.'
-                        : '현재 담보 기준 최대 ${won(availableLimit)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: amountController,
-                    enabled: canApply && !working,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    decoration: InputDecoration(
-                      labelText: '신청금액 (원)',
-                      hintText: canApply
-                          ? '최대 ${won(availableLimit)}'
-                          : '대출 조건을 확인하세요',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                ),
+                const SizedBox(height: 12),
 
-                  DropdownButtonFormField<int>(
-                    initialValue: effectiveTerm,
-                    isExpanded: true,
-                    menuMaxHeight: 192,
-                    itemHeight: 48,
-                    dropdownColor: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: ink,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: '대출기간 (게임 일수)',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final term in terms)
-                        DropdownMenuItem<int>(
-                          value: term,
-                          child: Text('게임 $term일'),
-                        ),
-                    ],
-                    onChanged: !canApply || working
-                        ? null
-                        : (value) {
-                      setState(() {
-                        selectedTerm =
-                            value ?? selectedTerm;
-                      });
-                    },
+                DropdownButtonFormField<int>(
+                  initialValue: effectiveTerm,
+                  isExpanded: true,
+                  menuMaxHeight: 192,
+                  itemHeight: 48,
+                  dropdownColor: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  style: const TextStyle(fontSize: 14, color: ink),
+                  decoration: const InputDecoration(
+                    labelText: '대출기간 (게임 일수)',
+                    border: OutlineInputBorder(),
                   ),
+                  items: [
+                    for (final term in terms)
+                      DropdownMenuItem<int>(
+                        value: term,
+                        child: Text('게임 $term일'),
+                      ),
+                  ],
+                  onChanged: !canApply || working
+                      ? null
+                      : (value) {
+                          setState(() {
+                            selectedTerm = value ?? selectedTerm;
+                          });
+                        },
+                ),
 
-                  const SizedBox(height: 15),
-                  FilledButton(
-                    onPressed: !canApply || working
-                        ? null
-                        : () {
-                      selectedTerm = effectiveTerm;
-                      issueLoan();
-                    },
-                    child: Text(
-                      working ? '처리 중...' : '대출 신청 및 실행',
-                    ),
-                  ),
-                ],
+                const SizedBox(height: 15),
+                FilledButton(
+                  onPressed: !canApply || working
+                      ? null
+                      : () {
+                          selectedTerm = effectiveTerm;
+                          issueLoan();
+                        },
+                  child: Text(working ? '처리 중...' : '대출 신청 및 실행'),
+                ),
+              ],
             ],
           ),
         ),
