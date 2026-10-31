@@ -1,4 +1,6 @@
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +11,7 @@ import 'package:stock/feature/bank/model/bank_product_model.dart';
 import 'package:stock/feature/bank/model/user_bank_account_model.dart';
 import 'package:stock/feature/bank/repository/bank_repository.dart';
 import 'package:stock/feature/bank/view/widget/loan_catalog_section.dart';
+import 'package:stock/core/game_time/game_time_service.dart';
 
 
 class BankScreen extends StatefulWidget {
@@ -42,11 +45,56 @@ class _BankScreenState extends State<BankScreen> {
   List<BankProductModel> _deposits = [];
   List<BankProductModel> _savings = [];
   List<UserBankAccountModel> _myProducts = [];
+  GameClockSnapshot? _gameClock;
+  bool? _newProductsUseGameTime;
+  bool _syncingClock = false;
+  Timer? _clockTimer;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (timer.tick % 60 == 0 && !_loading) {
+        _syncGameClock();
+      } else if (_myProducts.any((item) => item.usesGameTime)) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _syncGameClock() async {
+    if (_syncingClock) return;
+    _syncingClock = true;
+    try {
+      final data = await _bankRepository.fetchGameClock();
+      final snapshot = GameClockSnapshot.fromMap(data);
+      if (!mounted) return;
+      setState(() {
+        _gameClock = snapshot;
+        _newProductsUseGameTime = data['bank_products_time_model'] == 'virtual';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _gameClock = null;
+        _newProductsUseGameTime = null;
+      });
+    } finally {
+      _syncingClock = false;
+    }
+  }
+
+  String _termLabel(int days) {
+    if (_newProductsUseGameTime == null) return '$days일 (시간 기준 조회 실패)';
+    return '$days${_newProductsUseGameTime! ? '게임일' : '일(현실)'}';
   }
 
   Future<void> _loadData({
@@ -57,6 +105,7 @@ class _BankScreenState extends State<BankScreen> {
     }
 
     try {
+      await _syncGameClock();
       await _assetRepository.ensureUserAssetAccounts();
 
       final accounts =
@@ -244,7 +293,7 @@ class _BankScreenState extends State<BankScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '연 ${product.annualRate.toStringAsFixed(2)}% · ${product.termDays}일',
+                  '연 ${product.annualRate.toStringAsFixed(2)}% · ${_termLabel(product.termDays)}',
                   style: const TextStyle(
                     color: _muted,
                   ),
@@ -800,7 +849,7 @@ class _BankScreenState extends State<BankScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            '기간 ${item.termDays}일 · '
+            '기간 ${_termLabel(item.termDays)} · '
                 '최소 ${_money(item.minAmount)}',
             style: const TextStyle(
               fontSize: 12,
@@ -844,8 +893,10 @@ class _BankScreenState extends State<BankScreen> {
   Widget _ownedCard(
       UserBankAccountModel item,
       ) {
-    final matured =
-    !DateTime.now().isBefore(item.maturityAt);
+    final realNow = DateTime.now().toUtc();
+    final gameNow = _gameClock?.at(realNow);
+    final matured = item.maturedAt(realNow: realNow, gameNow: gameNow);
+    final canClaim = matured && (!item.usesGameTime || item.installmentsComplete);
 
     return _smallCard(
       Column(
@@ -871,7 +922,8 @@ class _BankScreenState extends State<BankScreen> {
           const SizedBox(height: 5),
           Text(
             '연 ${item.annualRateSnapshot.toStringAsFixed(2)}% · '
-                '만기 ${_date.format(item.maturityAt.toLocal())}',
+                '${item.usesGameTime ? '게임 만기' : '기존 만기(현실)'} '
+                '${_date.format(item.maturityAt.toLocal())}',
             style: const TextStyle(
               fontSize: 12,
               color: _muted,
@@ -891,7 +943,7 @@ class _BankScreenState extends State<BankScreen> {
             Text(
               '납입 ${item.paidInstallments}/'
                   '${item.totalInstallments ?? '-'}회 · '
-                  '다음 납입 '
+                  '${item.usesGameTime ? '다음 게임 납입일' : '다음 납입일(현실)'} '
                   '${item.nextPaymentDueAt == null ? '-' : _date.format(item.nextPaymentDueAt!.toLocal())}',
               style: const TextStyle(
                 fontSize: 12,
@@ -905,15 +957,15 @@ class _BankScreenState extends State<BankScreen> {
             runSpacing: 8,
             children: [
               if (item.isSavings &&
-                  !matured &&
+                  (!matured || item.usesGameTime) &&
                   item.remainingInstallments > 0)
                 OutlinedButton(
-                  onPressed: _working
+                  onPressed: _working || (item.usesGameTime && gameNow == null)
                       ? null
                       : () => _payInstallment(item),
                   child: const Text('회차 납입'),
                 ),
-              if (matured)
+              if (canClaim)
                 FilledButton(
                   onPressed: _working
                       ? null

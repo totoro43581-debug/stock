@@ -115,7 +115,7 @@ class _DepositSecuredLoanSectionState
         client
             .from('user_bank_accounts')
             .select(
-          'id,product_id,product_name_snapshot,principal_amount,maturity_at',
+          '*',
         )
             .eq('status', 'active')
             .eq('product_type', 'deposit'),
@@ -236,13 +236,16 @@ class _DepositSecuredLoanSectionState
 
     if (maturity == null) return [];
 
-    final realSecondsPerGameDay =
-    number(clock['real_seconds_per_game_day']);
-
-    if (realSecondsPerGameDay <= 0) return [];
-
-    final remainingSeconds =
-        maturity.difference(DateTime.now()).inSeconds;
+    final usesGameTime = selectedDeposit!['time_model'] == 'virtual';
+    final secondsPerGameDay = usesGameTime
+        ? 86400.0
+        : number(clock['real_seconds_per_game_day']);
+    if (secondsPerGameDay <= 0) return [];
+    final currentTime = usesGameTime
+        ? DateTime.tryParse(clock['game_datetime']?.toString() ?? '')
+        : DateTime.now();
+    if (currentTime == null) return [];
+    final remainingSeconds = maturity.difference(currentTime).inSeconds;
 
     final minimum =
     number(product!['min_term_game_days']).toInt();
@@ -255,7 +258,7 @@ class _DepositSecuredLoanSectionState
     return options.where((days) {
       return days >= minimum &&
           days <= maximum &&
-          remainingSeconds >= days * realSecondsPerGameDay;
+          remainingSeconds >= days * secondsPerGameDay;
     }).toList();
   }
 

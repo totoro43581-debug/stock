@@ -489,7 +489,7 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
                   _metric('납입원금', _won(_bankProducts[i].principalAmount)),
                   _metric('연이율',
                       '${_bankProducts[i].annualRateSnapshot.toStringAsFixed(2)}%'),
-                  _metric('만기일', DateFormat('yyyy.MM.dd').format(
+                  _metric(_bankProducts[i].usesGameTime ? '게임 만기일' : '만기일(현실)', DateFormat('yyyy.MM.dd').format(
                       _bankProducts[i].maturityAt.toLocal())),
                   _metric('만기 예상금액',
                       _won(_bankProducts[i].expectedMaturityAmount)),
