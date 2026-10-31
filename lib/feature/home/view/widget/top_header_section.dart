@@ -445,7 +445,8 @@ class _GameClockPanelState extends State<_GameClockPanel> {
 
     final period = gameNow.hour < 12 ? '오전' : '오후';
     final hour = gameNow.hour % 12 == 0 ? 12 : gameNow.hour % 12;
-    final timeText = '$period $hour:${_two(gameNow.minute)}';
+    final timeText =
+        '$period $hour:${_two(gameNow.minute)}:${_two(gameNow.second)}';
 
     return Container(
       width: 182,

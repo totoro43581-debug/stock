@@ -31,7 +31,6 @@ class _BankScreenState extends State<BankScreen> {
   final AssetAccountRepository _assetRepository =
   AssetAccountRepository();
   final NumberFormat _number = NumberFormat('#,##0');
-  final DateFormat _date = DateFormat('yyyy.MM.dd');
 
   String _tab = 'account';
   String _historyPeriod = 'recent';
@@ -46,6 +45,7 @@ class _BankScreenState extends State<BankScreen> {
   List<BankProductModel> _savings = [];
   List<UserBankAccountModel> _myProducts = [];
   GameClockSnapshot? _gameClock;
+  GameClockMapping? _clockMapping;
   bool? _newProductsUseGameTime;
   bool _syncingClock = false;
   Timer? _clockTimer;
@@ -58,7 +58,7 @@ class _BankScreenState extends State<BankScreen> {
       if (!mounted) return;
       if (timer.tick % 60 == 0 && !_loading) {
         _syncGameClock();
-      } else if (_myProducts.any((item) => item.usesGameTime)) {
+      } else if (_myProducts.isNotEmpty) {
         setState(() {});
       }
     });
@@ -76,20 +76,28 @@ class _BankScreenState extends State<BankScreen> {
     try {
       final data = await _bankRepository.fetchGameClock();
       final snapshot = GameClockSnapshot.fromMap(data);
+      final mapping = await _bankRepository.fetchClockMapping();
       if (!mounted) return;
       setState(() {
         _gameClock = snapshot;
+        _clockMapping = mapping;
         _newProductsUseGameTime = data['bank_products_time_model'] == 'virtual';
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _gameClock = null;
+        _clockMapping = null;
         _newProductsUseGameTime = null;
       });
     } finally {
       _syncingClock = false;
     }
+  }
+
+  String _productDeadline(UserBankAccountModel item, DateTime time) {
+    final deadline = item.usesGameTime ? _clockMapping?.realTimeForGameTime(time) : time.toUtc();
+    return realDeadlineLabel(deadline);
   }
 
   String _termLabel(int days) {
@@ -631,7 +639,7 @@ class _BankScreenState extends State<BankScreen> {
           Text(
             subtitle,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: _muted,
             ),
           ),
@@ -921,20 +929,20 @@ class _BankScreenState extends State<BankScreen> {
           ),
           const SizedBox(height: 5),
           Text(
-            '연 ${item.annualRateSnapshot.toStringAsFixed(2)}% · '
-                '${item.usesGameTime ? '게임 만기' : '기존 만기(현실)'} '
-                '${_date.format(item.maturityAt.toLocal())}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: _muted,
-            ),
+            '연 ${item.annualRateSnapshot.toStringAsFixed(2)}%',
+            style: const TextStyle(fontSize: 14, color: _muted),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '만기 예정 · 한국시간\n${_productDeadline(item, item.maturityAt)}',
+            style: const TextStyle(fontSize: 14, color: _ink, height: 1.5),
           ),
           const SizedBox(height: 5),
           Text(
             '예상 만기 수령액 '
                 '${_money(item.expectedMaturityAmount)}',
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 14,
               color: _muted,
             ),
           ),
@@ -943,10 +951,10 @@ class _BankScreenState extends State<BankScreen> {
             Text(
               '납입 ${item.paidInstallments}/'
                   '${item.totalInstallments ?? '-'}회 · '
-                  '${item.usesGameTime ? '다음 게임 납입일' : '다음 납입일(현실)'} '
-                  '${item.nextPaymentDueAt == null ? '-' : _date.format(item.nextPaymentDueAt!.toLocal())}',
+                  '다음 납입 예정 · 한국시간\n'
+                  '${item.nextPaymentDueAt == null ? '-' : _productDeadline(item, item.nextPaymentDueAt!)}',
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 color: _muted,
               ),
             ),

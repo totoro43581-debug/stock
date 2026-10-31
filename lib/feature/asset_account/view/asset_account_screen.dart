@@ -1,3 +1,4 @@
+import 'package:stock/core/game_time/game_time_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,6 +34,7 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
   List<CoinHoldingModel> _coins = [];
   List<UserBankAccountModel> _bankProducts = [];
   Map<String, dynamic> _loanLiabilities = {};
+  GameClockMapping? _clockMapping;
   List<_InvestmentTrade> _trades = [];
   Map<String, double> _stockPrices = {};
   Map<String, double> _coinPrices = {};
@@ -96,6 +98,7 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
       final stocks = await _stockRepo.fetchHoldings(user.id);
       final coins = await _coinRepo.fetchMyCoinHoldings();
       final bankProducts = await _bankRepo.fetchMyActiveBankAccounts();
+      final clockMapping = await _bankRepo.fetchClockMapping();
 
       final loanResponse = await _client.rpc('get_my_loan_liabilities');
 
@@ -145,6 +148,7 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
         _stocks = stocks;
         _coins = coins;
         _bankProducts = bankProducts;
+        _clockMapping = clockMapping;
         _loanLiabilities = loanLiabilities;
         _stockPrices = stockPrices;
         _coinPrices = coinPrices;
@@ -489,8 +493,11 @@ class _AssetAccountScreenState extends State<AssetAccountScreen> {
                   _metric('납입원금', _won(_bankProducts[i].principalAmount)),
                   _metric('연이율',
                       '${_bankProducts[i].annualRateSnapshot.toStringAsFixed(2)}%'),
-                  _metric(_bankProducts[i].usesGameTime ? '게임 만기일' : '만기일(현실)', DateFormat('yyyy.MM.dd').format(
-                      _bankProducts[i].maturityAt.toLocal())),
+                  _metric('만기 예정 · 한국시간', realDeadlineLabel(
+                      _bankProducts[i].usesGameTime
+                          ? _clockMapping?.realTimeForGameTime(_bankProducts[i].maturityAt)
+                          : _bankProducts[i].maturityAt.toUtc(),
+                      showRemaining: false)),
                   _metric('만기 예상금액',
                       _won(_bankProducts[i].expectedMaturityAmount)),
                 ]),
