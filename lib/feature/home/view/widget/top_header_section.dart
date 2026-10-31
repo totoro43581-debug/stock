@@ -54,7 +54,19 @@ class TopHeaderSection extends StatelessWidget {
                 ),
                 if (width >= 440) ...[
                   const SizedBox(width: 12),
-                  const _GameClockPanel(),
+                  if (session == null)
+                    const SizedBox(
+                      width: 182,
+                      child: Text(
+                        '로그인 후 게임 시간 표시',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    )
+                  else
+                    _GameClockPanel(key: ValueKey(session!.user.id)),
                 ],
                 const Spacer(),
                 if (!isCompact) ...[
@@ -325,7 +337,7 @@ class _HeaderMenuButton extends StatelessWidget {
 }
 
 class _GameClockPanel extends StatefulWidget {
-  const _GameClockPanel();
+  const _GameClockPanel({super.key});
 
   @override
   State<_GameClockPanel> createState() => _GameClockPanelState();
