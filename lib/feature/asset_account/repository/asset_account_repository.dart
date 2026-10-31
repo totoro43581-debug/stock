@@ -198,6 +198,17 @@ class AssetAccountRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  /// Include all bank activity and retain legacy cross-account transfer rows.
+  Future<List<Map<String, dynamic>>> fetchBankAccountTransactions({int limit = 300}) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return [];
+    final response = await _client.from('asset_account_transactions')
+        .select().eq('user_id', user.id)
+        .or('account_type.eq.bank,reason.in.(asset_transfer,asset_to_deposit,deposit_to_asset,asset_to_savings,savings_to_asset,asset_to_stock,stock_to_asset,asset_to_coin,coin_to_asset,loan_disbursement,loan_repayment,credit_loan_disbursement,credit_loan_repayment)')
+        .order('created_at', ascending: false).limit(limit);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   String _accountTypeLabel(String accountType) {
     switch (accountType) {
       case 'bank':

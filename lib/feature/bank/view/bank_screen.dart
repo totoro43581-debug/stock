@@ -38,6 +38,8 @@ class _BankScreenState extends State<BankScreen> {
   bool _loading = true;
   bool _working = false;
   String? _error;
+  String? _historyError;
+  bool _refreshingActivity = false;
 
   List<Map<String, dynamic>> _accounts = [];
   List<Map<String, dynamic>> _transactions = [];
@@ -58,6 +60,7 @@ class _BankScreenState extends State<BankScreen> {
       if (!mounted) return;
       if (timer.tick % 60 == 0 && !_loading) {
         _syncGameClock();
+        if (_tab == 'history') _refreshBankActivity();
       } else if (_myProducts.isNotEmpty) {
         setState(() {});
       }
@@ -119,21 +122,7 @@ class _BankScreenState extends State<BankScreen> {
       final accounts =
       await _assetRepository.fetchUserAssetAccounts();
 
-      final transactions =
-      await _assetRepository.fetchAssetAccountTransactions(
-        reasons: const [
-          'asset_transfer',
-          'asset_to_deposit',
-          'deposit_to_asset',
-          'asset_to_savings',
-          'savings_to_asset',
-          'asset_to_stock',
-          'stock_to_asset',
-          'asset_to_coin',
-          'coin_to_asset',
-        ],
-        limit: 300,
-      );
+      final transactions = await _assetRepository.fetchBankAccountTransactions();
 
       final deposits =
       await _bankRepository.fetchDepositProducts();
@@ -158,6 +147,7 @@ class _BankScreenState extends State<BankScreen> {
             .toList();
 
         _transactions = transactions;
+        _historyError = null;
         _deposits = deposits;
         _savings = savings;
         _myProducts = myProducts;
@@ -579,6 +569,7 @@ class _BankScreenState extends State<BankScreen> {
                 setState(() {
                   _tab = tab.$1;
                 });
+                if (tab.$1 == 'history') _refreshBankActivity();
               },
               style: OutlinedButton.styleFrom(
                 backgroundColor:
@@ -1002,6 +993,28 @@ class _BankScreenState extends State<BankScreen> {
     );
   }
 
+  Future<void> _refreshBankActivity() async {
+    if (_refreshingActivity || !mounted) return;
+    _refreshingActivity = true;
+    try {
+      final results = await Future.wait([
+        _assetRepository.fetchUserAssetAccounts(),
+        _assetRepository.fetchBankAccountTransactions(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _accounts = results[0].where((a) => const ['bank', 'stock', 'coin'].contains(a['account_type'])).toList();
+        _transactions = results[1];
+        _historyError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _historyError = '최신 거래내역을 불러오지 못했습니다. 다시 조회해 주세요.');
+    } finally {
+      _refreshingActivity = false;
+    }
+  }
+
   List<Map<String, dynamic>> get _filteredHistory {
     if (_historyPeriod == 'recent') {
       return _transactions.take(30).toList();
@@ -1078,6 +1091,11 @@ class _BankScreenState extends State<BankScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        if (_historyError != null) ...[
+          Text(_historyError!, style: const TextStyle(fontSize: 14, color: _muted)),
+          TextButton.icon(onPressed: _refreshBankActivity, icon: const Icon(Icons.refresh), label: const Text('거래내역 다시 조회')),
+          const SizedBox(height: 12),
+        ],
         AssetTransactionListWidget(
           title: '은행 거래내역',
           transactions: _filteredHistory,
