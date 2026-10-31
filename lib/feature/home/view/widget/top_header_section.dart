@@ -443,10 +443,9 @@ class _GameClockPanelState extends State<_GameClockPanel> {
       );
     }
 
-    final dateText =
-        '${gameNow.year}.${_two(gameNow.month)}.'
-        '${_two(gameNow.day)} '
-        '${_two(gameNow.hour)}:${_two(gameNow.minute)}';
+    final period = gameNow.hour < 12 ? '오전' : '오후';
+    final hour = gameNow.hour % 12 == 0 ? 12 : gameNow.hour % 12;
+    final timeText = '$period $hour:${_two(gameNow.minute)}';
 
     return Container(
       width: 182,
@@ -470,7 +469,7 @@ class _GameClockPanelState extends State<_GameClockPanel> {
           ),
           const SizedBox(height: 3),
           Text(
-            dateText,
+            timeText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(

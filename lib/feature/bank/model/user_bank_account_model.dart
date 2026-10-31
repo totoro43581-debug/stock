@@ -18,6 +18,7 @@ class UserBankAccountModel {
   final DateTime startAt;
   final DateTime maturityAt;
   final DateTime? nextPaymentDueAt;
+  final String timeModel;
 
   final String status;
   final DateTime createdAt;
@@ -39,6 +40,7 @@ class UserBankAccountModel {
     required this.startAt,
     required this.maturityAt,
     required this.nextPaymentDueAt,
+    this.timeModel = 'real',
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -47,6 +49,17 @@ class UserBankAccountModel {
   bool get isDeposit => productType == 'deposit';
 
   bool get isSavings => productType == 'savings';
+
+  bool get usesGameTime => timeModel == 'virtual';
+
+  bool maturedAt({required DateTime realNow, DateTime? gameNow}) {
+    final current = usesGameTime ? gameNow : realNow;
+    return current != null && !current.isBefore(maturityAt);
+  }
+
+  bool get installmentsComplete => !isSavings ||
+      (totalInstallments != null && totalInstallments! > 0 &&
+          paidInstallments >= totalInstallments!);
 
   bool get isActive => status == 'active';
 
@@ -95,6 +108,7 @@ class UserBankAccountModel {
       nextPaymentDueAt: map['next_payment_due_at'] == null
           ? null
           : _toDateTime(map['next_payment_due_at']),
+      timeModel: map['time_model']?.toString() ?? 'real',
       status: map['status']?.toString() ?? '',
       createdAt: _toDateTime(map['created_at']),
       updatedAt: _toDateTime(map['updated_at']),

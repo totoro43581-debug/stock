@@ -5,6 +5,12 @@ import 'package:stock/feature/bank/model/user_bank_account_model.dart';
 class BankRepository {
   final SupabaseClient _client = Supabase.instance.client;
 
+  Future<Map<String, dynamic>> fetchGameClock() async {
+    final data = await _client.rpc('get_game_clock');
+    if (data is! Map) throw const FormatException('게임 시간 응답이 올바르지 않습니다.');
+    return Map<String, dynamic>.from(data);
+  }
+
   Map<String, dynamic> _withBankName(Map<String, dynamic> row) {
     final bank = row['bank'];
 
@@ -129,28 +135,7 @@ class BankRepository {
 
     final response = await _client
         .from('user_bank_accounts')
-        .select(
-      '''
-          id,
-          user_id,
-          product_id,
-          product_name_snapshot,
-          product_type,
-          annual_rate_snapshot,
-          principal_amount,
-          installment_amount,
-          total_installments,
-          paid_installments,
-          expected_interest_amount,
-          expected_maturity_amount,
-          start_at,
-          maturity_at,
-          next_payment_due_at,
-          status,
-          created_at,
-          updated_at
-          ''',
-    )
+        .select()
         .eq('user_id', user.id)
         .order('created_at', ascending: false);
 
@@ -169,28 +154,7 @@ class BankRepository {
 
     final response = await _client
         .from('user_bank_accounts')
-        .select(
-      '''
-          id,
-          user_id,
-          product_id,
-          product_name_snapshot,
-          product_type,
-          annual_rate_snapshot,
-          principal_amount,
-          installment_amount,
-          total_installments,
-          paid_installments,
-          expected_interest_amount,
-          expected_maturity_amount,
-          start_at,
-          maturity_at,
-          next_payment_due_at,
-          status,
-          created_at,
-          updated_at
-          ''',
-    )
+        .select()
         .eq('user_id', user.id)
         .eq('status', 'active')
         .order('created_at', ascending: false);

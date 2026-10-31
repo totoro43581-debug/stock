@@ -1,5 +1,42 @@
 import 'game_time_config.dart';
 
+class GameClockSnapshot {
+  final DateTime gameTimeUtc;
+  final DateTime receivedAtUtc;
+  final double speed;
+
+  const GameClockSnapshot({
+    required this.gameTimeUtc,
+    required this.receivedAtUtc,
+    required this.speed,
+  });
+
+  factory GameClockSnapshot.fromMap(
+    Map<String, dynamic> data, {
+    DateTime? receivedAtUtc,
+  }) {
+    final time = DateTime.tryParse(data['game_datetime']?.toString() ?? '');
+    final speed = double.tryParse(
+      data['game_seconds_per_real_second']?.toString() ?? '',
+    );
+    if (time == null || speed == null || !speed.isFinite || speed <= 0) {
+      throw const FormatException('게임 시간 응답이 올바르지 않습니다.');
+    }
+    return GameClockSnapshot(
+      gameTimeUtc: time.toUtc(),
+      receivedAtUtc: (receivedAtUtc ?? DateTime.now()).toUtc(),
+      speed: speed,
+    );
+  }
+
+  DateTime at(DateTime realTime) {
+    final elapsed = realTime.toUtc().difference(receivedAtUtc).inMicroseconds;
+    return gameTimeUtc.add(
+      Duration(microseconds: ((elapsed < 0 ? 0 : elapsed) * speed).round()),
+    );
+  }
+}
+
 class GameTimeService {
   const GameTimeService();
 
