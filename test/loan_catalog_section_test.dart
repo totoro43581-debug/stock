@@ -26,6 +26,8 @@ class MemoryPkce extends GotrueAsyncStorage {
 
 class Fixture {
   bool loanFailure = false, offerFailure = false, epochFailure = false;
+  bool autopayAvailable = false;
+  String? autoResult;
   final mutations = <String>[];
   final calls = <String>[];
   List<Map<String, dynamic>> credits = [
@@ -57,6 +59,17 @@ class Fixture {
     'total_repayment_amount': principal + 900,
     'scheduled_payment': 10000,
   };
+  Map<String, dynamic> withAutoStatus(Map<String, dynamic> loan) => {
+    ...loan,
+    if (autopayAvailable) ...{
+      'automatic_repayment_enabled': true,
+      'automatic_repayment_result': autoResult,
+      'automatic_repayment_attempted_at': autoResult == null
+          ? null
+          : '2026-10-31T00:00:00Z',
+    },
+  };
+
   Future<http.Response> respond(http.Request req) async {
     final path = req.url.path;
     calls.add(path);
@@ -115,10 +128,10 @@ class Fixture {
     } else if (path.endsWith('/rpc/get_my_credit_loans')) {
       data = loanFailure
           ? {'message': 'unavailable', 'code': 'XX000'}
-          : credits;
+          : credits.map(withAutoStatus).toList();
       if (loanFailure) status = 500;
     } else if (path.endsWith('/rpc/get_my_deposit_secured_loans')) {
-      data = secured;
+      data = secured.map(withAutoStatus).toList();
     } else if (path.endsWith('/rpc/get_my_credit_loan_quote')) {
       data = {
         'min_amount': 1000,
@@ -128,7 +141,11 @@ class Fixture {
     } else if (path.endsWith('/game_clock_settings')) {
       data = epochFailure
           ? {'message': 'unavailable', 'code': '42501'}
-          : {'virtual_epoch': '2025-12-31T15:00:00Z'};
+          : {
+              'virtual_epoch': '2025-12-31T15:00:00Z',
+              'real_epoch': '2026-10-05T00:00:00Z',
+              'game_seconds_per_real_second': 6,
+            };
       if (epochFailure) status = 403;
     } else {
       throw StateError('Unexpected endpoint $path');
@@ -215,6 +232,7 @@ void main() {
     (t) async {
       await mount(t);
       expect(find.text('내 대출'), findsOneWidget);
+      expect(find.text('예정 시각 확인 불가'), findsNothing);
       expect(find.text('한빛은행 생활 신용대출'), findsOneWidget);
       expect(find.text('한빛은행 예금담보대출'), findsOneWidget);
       expect(
@@ -330,4 +348,51 @@ void main() {
       await t.pumpWidget(const SizedBox.shrink());
     });
   }
+  testWidgets(
+    'older server clearly shows autopay pending instead of claiming it is active',
+    (t) async {
+      await mount(t);
+      expect(find.text('자동상환 적용 대기'), findsNWidgets(2));
+      expect(find.text('기본 자동상환'), findsNothing);
+      await t.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'default autopay shortage and later success refresh without hiding the catalog',
+    (t) async {
+      fixture.autopayAvailable = true;
+      fixture.autoResult = 'insufficient_funds';
+      await mount(t);
+      expect(find.text('기본 자동상환'), findsNWidgets(2));
+      expect(find.text('자동상환 대기 · 생활계좌 잔액 부족'), findsNWidgets(2));
+      fixture.autoResult = 'paid';
+      fixture.credits.first['outstanding_principal'] = 44000;
+      await t.pump(const Duration(seconds: 60));
+      await drain(t);
+      expect(find.text('최근 자동상환 완료'), findsNWidgets(2));
+      expect(find.text('자동상환 대기 · 생활계좌 잔액 부족'), findsNothing);
+      expect(find.text('44,000원'), findsWidgets);
+      expect(find.text('대출 상품'), findsOneWidget);
+      await t.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('open management refreshes a loan closed by the server', (
+    t,
+  ) async {
+    fixture.autopayAvailable = true;
+    await mount(t);
+    await t.tap(find.text('상환·관리').first);
+    await t.pumpAndSettle();
+    fixture.credits = [];
+    await t.pump(const Duration(seconds: 60));
+    await drain(t);
+    expect(find.text('선택한 대출은 현재 이용 중 목록에 없습니다.'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(Dialog), matching: find.text('전액상환')),
+      findsNothing,
+    );
+    await t.pumpWidget(const SizedBox.shrink());
+  });
 }

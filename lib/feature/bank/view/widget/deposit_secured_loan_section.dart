@@ -1,3 +1,4 @@
+import 'package:stock/feature/bank/view/widget/loan_auto_repayment_notice.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -35,6 +36,8 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
   final amountController = TextEditingController();
 
   bool loading = true;
+  bool requestInFlight = false;
+  bool refreshQueued = false;
   bool working = false;
   String? error;
 
@@ -53,8 +56,13 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
   void initState() {
     super.initState();
     load();
-    deadlineTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !loading && loans.isNotEmpty) setState(() {});
+    deadlineTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (widget.manageOnly && timer.tick % 60 == 0 && !loading && !working) {
+        load(showLoading: false);
+      } else if (!loading && loans.isNotEmpty) {
+        setState(() {});
+      }
     });
   }
 
@@ -101,11 +109,16 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<void> load() async {
+  Future<void> load({bool showLoading = true}) async {
     if (!mounted) return;
+    if (requestInFlight) {
+      refreshQueued = true;
+      return;
+    }
+    requestInFlight = true;
 
     setState(() {
-      loading = true;
+      if (showLoading) loading = true;
       error = null;
     });
 
@@ -211,6 +224,12 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
         error = e.toString();
         loading = false;
       });
+    } finally {
+      requestInFlight = false;
+      if (refreshQueued && mounted) {
+        refreshQueued = false;
+        unawaited(load(showLoading: false));
+      }
     }
   }
 
@@ -552,6 +571,8 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
               );
             },
           ),
+          const SizedBox(height: 16),
+          LoanAutoRepaymentNotice(loan: loan, isCredit: false),
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
@@ -611,7 +632,7 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
       return _panel(
         '예금담보대출 상환',
         loans.isEmpty
-            ? const Text('현재 이용 중인 예금담보대출이 없습니다.')
+            ? const Text('선택한 대출은 현재 이용 중 목록에 없습니다.')
             : Column(children: [for (final loan in loans) _loanCard(loan)]),
       );
     }

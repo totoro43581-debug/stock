@@ -1,3 +1,4 @@
+import 'package:stock/feature/bank/view/widget/loan_auto_repayment_notice.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -27,6 +28,8 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
   final _money = NumberFormat('#,##0');
 
   bool _loading = true;
+  bool _catalogRequestInFlight = false;
+  bool _catalogRefreshQueued = false;
   String? _error;
   String _category = 'all';
 
@@ -35,6 +38,8 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
   List<Map<String, dynamic>> _ownedLoans = [];
   GameClockMapping? _clockMapping;
   bool _ownedLoading = true;
+  bool _ownedRequestInFlight = false;
+  bool _ownedRefreshQueued = false;
   String? _ownedError;
   Timer? _deadlineTimer;
 
@@ -42,8 +47,13 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
   void initState() {
     super.initState();
     _refresh();
-    _deadlineTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !_ownedLoading && _ownedLoans.isNotEmpty) setState(() {});
+    _deadlineTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (timer.tick % 60 == 0) {
+        _refresh(quiet: true);
+      } else if (!_ownedLoading && _ownedLoans.isNotEmpty) {
+        setState(() {});
+      }
     });
   }
 
@@ -62,11 +72,16 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
     return '${_money.format(_number(value).round())}원';
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool showLoading = true}) async {
+    if (_catalogRequestInFlight) {
+      _catalogRefreshQueued = true;
+      return;
+    }
+    _catalogRequestInFlight = true;
     if (!mounted) return;
 
     setState(() {
-      _loading = true;
+      if (showLoading) _loading = true;
       _error = null;
     });
 
@@ -100,22 +115,35 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
         _loading = false;
         _error = e.toString();
       });
+    } finally {
+      _catalogRequestInFlight = false;
+      if (_catalogRefreshQueued && mounted) {
+        _catalogRefreshQueued = false;
+        unawaited(_load(showLoading: false));
+      }
     }
   }
 
-  void _refresh() {
-    _load();
-    _loadOwnedLoans();
+  void _refresh({bool quiet = false}) {
+    _load(showLoading: !quiet);
+    _loadOwnedLoans(showLoading: !quiet);
   }
 
   Future<GameClockMapping?> _readGameEpoch() =>
       BankRepository().fetchClockMapping();
 
-  Future<void> _loadOwnedLoans() async {
-    setState(() {
-      _ownedLoading = true;
-      _ownedError = null;
-    });
+  Future<void> _loadOwnedLoans({bool showLoading = true}) async {
+    if (_ownedRequestInFlight) {
+      _ownedRefreshQueued = true;
+      return;
+    }
+    _ownedRequestInFlight = true;
+    if (showLoading) {
+      setState(() {
+        _ownedLoading = true;
+        _ownedError = null;
+      });
+    }
     try {
       final client = Supabase.instance.client;
       final result = await Future.wait<dynamic>([
@@ -137,6 +165,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
             },
       ];
       setState(() {
+        _ownedError = null;
         _ownedLoans = loans;
         _clockMapping = result[2] as GameClockMapping?;
         _ownedLoading = false;
@@ -147,6 +176,12 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
         _ownedError = '내 대출을 불러오지 못했습니다. 잠시 후 다시 조회해 주세요.';
         _ownedLoading = false;
       });
+    } finally {
+      _ownedRequestInFlight = false;
+      if (_ownedRefreshQueued && mounted) {
+        _ownedRefreshQueued = false;
+        unawaited(_loadOwnedLoans(showLoading: false));
+      }
     }
   }
 
@@ -301,6 +336,8 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
               );
             },
           ),
+          const SizedBox(height: 18),
+          LoanAutoRepaymentNotice(loan: loan, isCredit: credit),
           const SizedBox(height: 20),
           const Divider(height: 1, color: _line),
           const SizedBox(height: 16),
@@ -1353,6 +1390,7 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
   int _term = 180;
 
   bool _loading = true;
+  int _readVersion = 0;
   bool _busy = false;
 
   String? _error;
@@ -1373,8 +1411,13 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
     _amountController.addListener(_resetIssueKey);
 
     _load();
-    _deadlineTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !_loading && _loans.isNotEmpty) setState(() {});
+    _deadlineTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (widget.manageOnly && timer.tick % 60 == 0 && !_loading && !_busy) {
+        _load(showLoading: false);
+      } else if (!_loading && _loans.isNotEmpty) {
+        setState(() {});
+      }
     });
   }
 
@@ -1434,11 +1477,12 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
     gameDay < 0 ? null : _clockMapping?.realTimeForGameDay(gameDay),
   );
 
-  Future<void> _load() async {
+  Future<void> _load({bool showLoading = true}) async {
     if (!mounted) return;
+    final readVersion = ++_readVersion;
 
     setState(() {
-      _loading = true;
+      if (showLoading) _loading = true;
       _error = null;
     });
 
@@ -1457,7 +1501,7 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
         _loadGameEpoch(),
       ]);
 
-      if (!mounted) return;
+      if (!mounted || readVersion != _readVersion) return;
 
       if (result[1] is! List) {
         throw const FormatException('대출 목록 응답을 확인할 수 없습니다.');
@@ -1484,7 +1528,7 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || readVersion != _readVersion) return;
 
       setState(() {
         _loading = false;
@@ -1805,6 +1849,7 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
                 '${today > due ? ' · 연체' : ''}',
           ),
           _infoRow('만기 예정(한국시간)', _gameDate(mature)),
+          LoanAutoRepaymentNotice(loan: loan, isCredit: true),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -1877,9 +1922,11 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
         const SizedBox(height: 12),
 
         if (_loans.isEmpty)
-          const Text(
-            '현재 이용 중인 신용대출이 없습니다.',
-            style: TextStyle(fontSize: 14, color: _muted),
+          Text(
+            widget.manageOnly
+                ? '선택한 대출은 현재 이용 중 목록에 없습니다.'
+                : '현재 이용 중인 신용대출이 없습니다.',
+            style: const TextStyle(fontSize: 14, color: _muted),
           )
         else
           for (final loan in _loans) _loanCard(loan),
