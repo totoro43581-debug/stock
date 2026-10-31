@@ -1,9 +1,24 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/bank/model/bank_product_model.dart';
 import 'package:stock/feature/bank/model/user_bank_account_model.dart';
+import 'package:stock/core/game_time/game_time_service.dart';
 
 class BankRepository {
   final SupabaseClient _client = Supabase.instance.client;
+
+  Future<GameClockMapping?> fetchClockMapping() async {
+    try {
+      final data = await _client
+          .from('game_clock_settings')
+          .select('real_epoch,virtual_epoch,game_seconds_per_real_second')
+          .eq('singleton_id', true)
+          .single();
+      return GameClockMapping.fromMap(data);
+    } catch (_) {
+      // A failed display conversion must not block existing financial operations.
+      return null;
+    }
+  }
 
   Future<Map<String, dynamic>> fetchGameClock() async {
     final data = await _client.rpc('get_game_clock');
@@ -24,8 +39,7 @@ class BankRepository {
   Future<List<BankProductModel>> fetchActiveBankProducts() async {
     final response = await _client
         .from('bank_products')
-        .select(
-      '''
+        .select('''
           id,
           product_code,
           product_name,
@@ -42,8 +56,7 @@ class BankRepository {
           bank:banks!bank_products_bank_id_fkey(
             bank_name
           )
-          ''',
-    )
+          ''')
         .eq('is_active', true)
         .order('product_type', ascending: true)
         .order('annual_rate', ascending: false);
@@ -59,8 +72,7 @@ class BankRepository {
   Future<List<BankProductModel>> fetchDepositProducts() async {
     final response = await _client
         .from('bank_products')
-        .select(
-      '''
+        .select('''
           id,
           product_code,
           product_name,
@@ -77,8 +89,7 @@ class BankRepository {
           bank:banks!bank_products_bank_id_fkey(
             bank_name
           )
-          ''',
-    )
+          ''')
         .eq('is_active', true)
         .eq('product_type', 'deposit')
         .order('annual_rate', ascending: false);
@@ -94,8 +105,7 @@ class BankRepository {
   Future<List<BankProductModel>> fetchSavingsProducts() async {
     final response = await _client
         .from('bank_products')
-        .select(
-      '''
+        .select('''
           id,
           product_code,
           product_name,
@@ -112,8 +122,7 @@ class BankRepository {
           bank:banks!bank_products_bank_id_fkey(
             bank_name
           )
-          ''',
-    )
+          ''')
         .eq('is_active', true)
         .eq('product_type', 'savings')
         .order('annual_rate', ascending: false);
@@ -171,10 +180,7 @@ class BankRepository {
   }) async {
     final response = await _client.rpc(
       'open_bank_deposit',
-      params: {
-        'p_product_id': productId,
-        'p_amount': amount,
-      },
+      params: {'p_product_id': productId, 'p_amount': amount},
     );
 
     return Map<String, dynamic>.from(response as Map);
@@ -202,9 +208,7 @@ class BankRepository {
   }) async {
     final response = await _client.rpc(
       'pay_bank_savings_installment',
-      params: {
-        'p_account_id': accountId,
-      },
+      params: {'p_account_id': accountId},
     );
 
     return Map<String, dynamic>.from(response as Map);
@@ -216,9 +220,7 @@ class BankRepository {
   }) async {
     final response = await _client.rpc(
       'claim_bank_product_account',
-      params: {
-        'p_account_id': accountId,
-      },
+      params: {'p_account_id': accountId},
     );
 
     return Map<String, dynamic>.from(response as Map);
@@ -230,9 +232,7 @@ class BankRepository {
   }) async {
     final response = await _client.rpc(
       'cancel_bank_product_account',
-      params: {
-        'p_account_id': accountId,
-      },
+      params: {'p_account_id': accountId},
     );
 
     return Map<String, dynamic>.from(response as Map);

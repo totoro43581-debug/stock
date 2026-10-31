@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:stock/feature/bank/view/widget/deposit_secured_loan_section.dart';
+import 'package:stock/feature/bank/repository/bank_repository.dart';
+import 'package:stock/core/game_time/game_time_service.dart';
 
 class LoanCatalogSection extends StatefulWidget {
   final VoidCallback? onChanged;
@@ -30,14 +33,24 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
   List<Map<String, dynamic>> _offers = [];
   Map<String, dynamic> _overview = {};
   List<Map<String, dynamic>> _ownedLoans = [];
-  DateTime? _gameEpoch;
+  GameClockMapping? _clockMapping;
   bool _ownedLoading = true;
   String? _ownedError;
+  Timer? _deadlineTimer;
 
   @override
   void initState() {
     super.initState();
     _refresh();
+    _deadlineTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && !_ownedLoading && _ownedLoans.isNotEmpty) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _deadlineTimer?.cancel();
+    super.dispose();
   }
 
   double _number(dynamic value) {
@@ -95,20 +108,8 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
     _loadOwnedLoans();
   }
 
-  Future<DateTime?> _readGameEpoch() async {
-    try {
-      final settings = await Supabase.instance.client
-          .from('game_clock_settings')
-          .select('virtual_epoch')
-          .eq('singleton_id', true)
-          .single();
-      return DateTime.tryParse(
-        settings['virtual_epoch']?.toString() ?? '',
-      )?.toUtc();
-    } catch (_) {
-      return null;
-    }
-  }
+  Future<GameClockMapping?> _readGameEpoch() =>
+      BankRepository().fetchClockMapping();
 
   Future<void> _loadOwnedLoans() async {
     setState(() {
@@ -137,7 +138,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
       ];
       setState(() {
         _ownedLoans = loans;
-        _gameEpoch = result[2] as DateTime?;
+        _clockMapping = result[2] as GameClockMapping?;
         _ownedLoading = false;
       });
     } catch (_) {
@@ -151,10 +152,11 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
 
   String _ownedDate(dynamic day) {
     final value = int.tryParse(day?.toString() ?? '');
-    if (_gameEpoch == null || value == null) return '날짜 확인 불가';
-    return DateFormat(
-      'yyyy.MM.dd',
-    ).format(_gameEpoch!.add(Duration(days: value)).toLocal());
+    return realDeadlineLabel(
+      value == null || value < 0
+          ? null
+          : _clockMapping?.realTimeForGameDay(value),
+    );
   }
 
   Widget _loanMetric(String label, String value) {
@@ -274,7 +276,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                 _loanMetric('전체 상환 예상액', _won(total)),
                 if (credit)
                   _loanMetric(
-                    '다음 상환일 · 게임 날짜',
+                    '다음 상환 예정 · 한국시간',
                     _ownedDate(loan['next_payment_game_day']),
                   )
                 else
@@ -285,7 +287,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                         : '연 ${_number(loan['annual_rate']).toStringAsFixed(2)}%',
                   ),
                 _loanMetric(
-                  '만기일 · 게임 날짜',
+                  '만기 예정 · 한국시간',
                   _ownedDate(loan['maturity_game_day']),
                 ),
               ];
@@ -435,7 +437,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
             ],
             const SizedBox(height: 12),
             const Text(
-              '이자와 상환 예상액은 조회 시점 기준이며, 실제 상환 시 서버에서 다시 계산합니다.',
+              '날짜는 조회한 게임 배속으로 환산한 한국시간입니다. 배속 변경 시 예정 시각이 달라질 수 있으며, 이자와 상환액은 실행 시 서버에서 다시 계산합니다.',
               style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
             ),
           ],
@@ -1357,11 +1359,12 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
 
   Map<String, dynamic> _quote = {};
   List<Map<String, dynamic>> _loans = [];
-  DateTime? _gameEpoch;
+  GameClockMapping? _clockMapping;
 
   String? _issueKey;
   String? _repaySignature;
   String? _repayKey;
+  Timer? _deadlineTimer;
 
   @override
   void initState() {
@@ -1370,12 +1373,16 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
     _amountController.addListener(_resetIssueKey);
 
     _load();
+    _deadlineTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && !_loading && _loans.isNotEmpty) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _amountController.removeListener(_resetIssueKey);
 
+    _deadlineTimer?.cancel();
     _amountController.dispose();
 
     super.dispose();
@@ -1420,31 +1427,12 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<DateTime?> _loadGameEpoch() async {
-    try {
-      final settings = await _client
-          .from('game_clock_settings')
-          .select('virtual_epoch')
-          .eq('singleton_id', true)
-          .single();
+  Future<GameClockMapping?> _loadGameEpoch() =>
+      BankRepository().fetchClockMapping();
 
-      return DateTime.tryParse(
-        settings['virtual_epoch']?.toString() ?? '',
-      )?.toUtc();
-    } catch (_) {
-      // A date lookup failure must not block loan applications or repayments.
-      return null;
-    }
-  }
-
-  String _gameDate(int gameDay) {
-    final epoch = _gameEpoch;
-    if (epoch == null) return '날짜 확인 불가';
-
-    // get_game_clock defines game_day as whole days since virtual_epoch (day 0).
-    final date = epoch.add(Duration(days: gameDay));
-    return DateFormat('yyyy.MM.dd').format(date.toLocal());
-  }
+  String _gameDate(int gameDay) => realDeadlineLabel(
+    gameDay < 0 ? null : _clockMapping?.realTimeForGameDay(gameDay),
+  );
 
   Future<void> _load() async {
     if (!mounted) return;
@@ -1491,7 +1479,7 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
                   .toList()
             : [];
 
-        _gameEpoch = result[2] as DateTime?;
+        _clockMapping = result[2] as GameClockMapping?;
 
         _loading = false;
       });
@@ -1812,11 +1800,11 @@ class _BasicCreditLoanSectionState extends State<_BasicCreditLoanSection> {
           _infoRow('전체 상환액', _won(loan['total_repayment_amount'])),
           _infoRow('회차 상환액', _won(loan['scheduled_payment'])),
           _infoRow(
-            '다음 상환일',
+            '상환 예정(한국시간)',
             '${_gameDate(due)}'
                 '${today > due ? ' · 연체' : ''}',
           ),
-          _infoRow('대출 만기일', _gameDate(mature)),
+          _infoRow('만기 예정(한국시간)', _gameDate(mature)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,

@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:stock/feature/bank/repository/bank_repository.dart';
+import 'package:stock/core/game_time/game_time_service.dart';
 
 class DepositSecuredLoanSection extends StatefulWidget {
   final VoidCallback? onChanged;
@@ -40,7 +43,8 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
 
   List<Map<String, dynamic>> deposits = [];
   List<Map<String, dynamic>> loans = [];
-  DateTime? gameEpoch;
+  GameClockMapping? clockMapping;
+  Timer? deadlineTimer;
 
   String? selectedDepositId;
   int selectedTerm = 10;
@@ -49,10 +53,14 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
   void initState() {
     super.initState();
     load();
+    deadlineTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && !loading && loans.isNotEmpty) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    deadlineTimer?.cancel();
     amountController.dispose();
     super.dispose();
   }
@@ -120,7 +128,7 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
                     loan['id'].toString() == widget.loanId,
               )
               .toList();
-          gameEpoch = results[1] as DateTime?;
+          clockMapping = results[1] as GameClockMapping?;
           loading = false;
         });
         return;
@@ -186,7 +194,7 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
         deposits = fetchedDeposits;
         loans = fetchedLoans;
         clock = fetchedClock;
-        gameEpoch = results[4] as DateTime?;
+        clockMapping = results[4] as GameClockMapping?;
 
         if (!deposits.any((item) => item['id'] == selectedDepositId)) {
           selectedDepositId = deposits.isEmpty
@@ -206,27 +214,16 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
     }
   }
 
-  Future<DateTime?> readGameEpoch() async {
-    try {
-      final settings = await client
-          .from('game_clock_settings')
-          .select('virtual_epoch')
-          .eq('singleton_id', true)
-          .single();
-      return DateTime.tryParse(
-        settings['virtual_epoch']?.toString() ?? '',
-      )?.toUtc();
-    } catch (_) {
-      return null;
-    }
-  }
+  Future<GameClockMapping?> readGameEpoch() =>
+      BankRepository().fetchClockMapping();
 
   String gameDate(dynamic day) {
     final value = int.tryParse(day?.toString() ?? '');
-    if (gameEpoch == null || value == null) return '날짜 확인 불가';
-    return DateFormat(
-      'yyyy.MM.dd',
-    ).format(gameEpoch!.add(Duration(days: value)).toLocal());
+    return realDeadlineLabel(
+      value == null || value < 0
+          ? null
+          : clockMapping?.realTimeForGameDay(value),
+    );
   }
 
   Map<String, dynamic>? get selectedDeposit {
@@ -523,7 +520,7 @@ class _DepositSecuredLoanSectionState extends State<DepositSecuredLoanSection> {
                 ('잔여 원금', won(loan['outstanding_principal'])),
                 ('발생 이자', won(loan['accrued_interest'])),
                 ('전체 상환 예상액', won(loan['full_repayment_amount'])),
-                ('만기일 · 게임 날짜', gameDate(loan['maturity_game_day'])),
+                ('만기 예정 · 한국시간', gameDate(loan['maturity_game_day'])),
               ];
               return Wrap(
                 spacing: 20,

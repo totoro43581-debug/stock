@@ -316,7 +316,7 @@ void main() {
       await mount(t);
       expect(find.text('한빛은행 생활 신용대출'), findsOneWidget);
       expect(find.text('상환·관리'), findsNWidgets(2));
-      expect(find.text('날짜 확인 불가'), findsNWidgets(3));
+      expect(find.text('예정 시각 확인 불가'), findsNWidgets(3));
       await t.pumpWidget(const SizedBox.shrink());
     },
   );
