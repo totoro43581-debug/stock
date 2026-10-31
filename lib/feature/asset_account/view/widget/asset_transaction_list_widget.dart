@@ -23,20 +23,15 @@ class _AssetTransactionListWidgetState
   bool _isExpanded = false;
 
   List<Map<String, dynamic>> get _visibleTransactions {
-    if (_isExpanded ||
-        widget.transactions.length <= _defaultVisibleCount) {
+    if (_isExpanded || widget.transactions.length <= _defaultVisibleCount) {
       return widget.transactions;
     }
 
-    return widget.transactions
-        .take(_defaultVisibleCount)
-        .toList();
+    return widget.transactions.take(_defaultVisibleCount).toList();
   }
 
   @override
-  void didUpdateWidget(
-      covariant AssetTransactionListWidget oldWidget,
-      ) {
+  void didUpdateWidget(covariant AssetTransactionListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.title != widget.title) {
@@ -46,20 +41,15 @@ class _AssetTransactionListWidgetState
 
   @override
   Widget build(BuildContext context) {
-    final bool isCompact =
-        MediaQuery.of(context).size.width < 760;
+    final bool isCompact = MediaQuery.of(context).size.width < 760;
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(
-        isCompact ? 14 : 18,
-      ),
+      padding: EdgeInsets.all(isCompact ? 14 : 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,29 +63,19 @@ class _AssetTransactionListWidgetState
           else ...[
             Column(
               children: [
-                for (
-                int i = 0;
-                i < _visibleTransactions.length;
-                i++
-                ) ...[
+                for (int i = 0; i < _visibleTransactions.length; i++) ...[
                   _buildTransactionRow(
-                    transaction:
-                    _visibleTransactions[i],
+                    transaction: _visibleTransactions[i],
                     isCompact: isCompact,
                   ),
 
-                  if (i !=
-                      _visibleTransactions.length - 1)
-                    const Divider(
-                      height: 1,
-                      color: Color(0xFFE5E7EB),
-                    ),
+                  if (i != _visibleTransactions.length - 1)
+                    const Divider(height: 1, color: Color(0xFFE5E7EB)),
                 ],
               ],
             ),
 
-            if (widget.transactions.length >
-                _defaultVisibleCount) ...[
+            if (widget.transactions.length > _defaultVisibleCount) ...[
               const SizedBox(height: 14),
 
               _buildMoreButton(),
@@ -122,19 +102,16 @@ class _AssetTransactionListWidgetState
 
         Container(
           height: 28,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: const Color(0xFFF3F4F6),
-            borderRadius:
-            BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             '총 ${widget.transactions.length}건',
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: FontWeight.w800,
               color: Color(0xFF4B5563),
             ),
@@ -145,9 +122,7 @@ class _AssetTransactionListWidgetState
   }
 
   Widget _buildMoreButton() {
-    final int remainCount =
-        widget.transactions.length -
-            _defaultVisibleCount;
+    final int remainCount = widget.transactions.length - _defaultVisibleCount;
 
     return SizedBox(
       width: double.infinity,
@@ -159,40 +134,27 @@ class _AssetTransactionListWidgetState
           });
         },
         style: OutlinedButton.styleFrom(
-          backgroundColor:
-          const Color(0xFFF9FAFB),
-          foregroundColor:
-          const Color(0xFF374151),
-          side: const BorderSide(
-            color: Color(0xFFE5E7EB),
-          ),
+          backgroundColor: const Color(0xFFF9FAFB),
+          foregroundColor: const Color(0xFF374151),
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
           shape: RoundedRectangleBorder(
-            borderRadius:
-            BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10),
           ),
         ),
         child: Row(
-          mainAxisAlignment:
-          MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              _isExpanded
-                  ? '접기'
-                  : '더보기 ($remainCount건)',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
+              _isExpanded ? '접기' : '더보기 ($remainCount건)',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
             ),
 
             const SizedBox(width: 5),
 
             Icon(
               _isExpanded
-                  ? Icons
-                  .keyboard_arrow_up_rounded
-                  : Icons
-                  .keyboard_arrow_down_rounded,
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
               size: 19,
             ),
           ],
@@ -208,11 +170,8 @@ class _AssetTransactionListWidgetState
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: const Color(0xFFF9FAFB),
-        borderRadius:
-        BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: const Text(
         '거래내역이 없습니다.',
@@ -229,61 +188,38 @@ class _AssetTransactionListWidgetState
     required Map<String, dynamic> transaction,
     required bool isCompact,
   }) {
-    final String type =
-        transaction['type']?.toString() ?? '';
+    final String type = transaction['type']?.toString() ?? '';
 
-    final String reason =
-        transaction['reason']?.toString() ?? '';
+    final String reason = transaction['reason']?.toString() ?? '';
 
-    final String accountType =
-        transaction['account_type']
-            ?.toString() ??
-            '';
+    final String accountType = transaction['account_type']?.toString() ?? '';
 
-    final String rowTitle =
-        transaction['title']?.toString() ??
-            '-';
+    final String rowTitle = transaction['title']?.toString() ?? '-';
 
-    final String memo =
-        transaction['memo']?.toString() ?? '';
+    final String memo = transaction['memo']?.toString() ?? '';
 
-    final double amount =
-    _toDouble(transaction['amount']);
+    final double amount = _toDouble(transaction['amount']);
 
-    final double balanceAfter =
-    _toDouble(
-      transaction['balance_after'],
-    );
+    final double balanceAfter = _toDouble(transaction['balance_after']);
 
-    final DateTime? createdAt =
-    _toNullableDateTime(
-      transaction['created_at'],
-    );
+    final DateTime? createdAt = _toNullableDateTime(transaction['created_at']);
 
-    final bool isDeposit =
-        type == 'deposit' || type == 'in';
+    final bool isDeposit = type == 'deposit' || type == 'in';
 
-    final bool isTransfer =
-        type == 'transfer';
+    final bool isTransfer = type == 'transfer';
 
     final Color mainColor;
     final Color chipColor;
 
     if (isTransfer) {
-      mainColor =
-      const Color(0xFF2563EB);
-      chipColor =
-      const Color(0xFFDBEAFE);
+      mainColor = const Color(0xFF2563EB);
+      chipColor = const Color(0xFFDBEAFE);
     } else if (isDeposit) {
-      mainColor =
-      const Color(0xFF15803D);
-      chipColor =
-      const Color(0xFFDCFCE7);
+      mainColor = const Color(0xFF15803D);
+      chipColor = const Color(0xFFDCFCE7);
     } else {
-      mainColor =
-      const Color(0xFFB91C1C);
-      chipColor =
-      const Color(0xFFFEE2E2);
+      mainColor = const Color(0xFFB91C1C);
+      chipColor = const Color(0xFFFEE2E2);
     }
 
     if (isCompact) {
@@ -334,12 +270,8 @@ class _AssetTransactionListWidgetState
     required DateTime? createdAt,
   }) {
     return Container(
-      constraints: const BoxConstraints(
-        minHeight: 64,
-      ),
-      padding: const EdgeInsets.symmetric(
-        vertical: 10,
-      ),
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           _buildTypeChip(
@@ -354,15 +286,11 @@ class _AssetTransactionListWidgetState
           SizedBox(
             width: 96,
             child: Text(
-              _transactionReasonShortLabel(
-                reason,
-              ),
+              _transactionReasonShortLabel(reason),
               style: const TextStyle(
-                fontSize: 12,
-                fontWeight:
-                FontWeight.w900,
-                color:
-                Color(0xFF374151),
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF374151),
               ),
             ),
           ),
@@ -391,8 +319,7 @@ class _AssetTransactionListWidgetState
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: 15,
-                fontWeight:
-                FontWeight.w900,
+                fontWeight: FontWeight.w900,
                 color: mainColor,
               ),
             ),
@@ -406,11 +333,9 @@ class _AssetTransactionListWidgetState
               '잔액 ${_formatMoney(balanceAfter)}원',
               textAlign: TextAlign.right,
               style: const TextStyle(
-                fontSize: 12,
-                fontWeight:
-                FontWeight.w800,
-                color:
-                Color(0xFF374151),
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF374151),
               ),
             ),
           ),
@@ -420,18 +345,12 @@ class _AssetTransactionListWidgetState
           SizedBox(
             width: 96,
             child: Text(
-              createdAt == null
-                  ? '-'
-                  : _formatDateTime(
-                createdAt,
-              ),
+              createdAt == null ? '-' : _formatDateTime(createdAt),
               textAlign: TextAlign.right,
               style: const TextStyle(
-                fontSize: 12,
-                fontWeight:
-                FontWeight.w700,
-                color:
-                Color(0xFF6B7280),
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF6B7280),
               ),
             ),
           ),
@@ -455,52 +374,47 @@ class _AssetTransactionListWidgetState
     required DateTime? createdAt,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _buildTypeChip(
-                isDeposit: isDeposit,
-                isTransfer: isTransfer,
-                mainColor: mainColor,
-                chipColor: chipColor,
-              ),
-
-              const SizedBox(width: 8),
-
-              Text(
-                _transactionReasonShortLabel(
-                  reason,
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  children: [
+                    _buildTypeChip(
+                      isDeposit: isDeposit,
+                      isTransfer: isTransfer,
+                      mainColor: mainColor,
+                      chipColor: chipColor,
+                    ),
+                    Text(
+                      _transactionReasonShortLabel(reason),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF374151),
+                      ),
+                    ),
+                  ],
                 ),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight:
-                  FontWeight.w900,
-                  color:
-                  Color(0xFF374151),
+                Text(
+                  createdAt == null ? '-' : _formatDateTime(createdAt),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF4B5563),
+                  ),
                 ),
-              ),
-
-              const Spacer(),
-
-              Text(
-                createdAt == null
-                    ? '-'
-                    : _formatDateTime(
-                  createdAt,
-                ),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color:
-                  Color(0xFF6B7280),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
 
           const SizedBox(height: 8),
@@ -514,35 +428,35 @@ class _AssetTransactionListWidgetState
 
           const SizedBox(height: 8),
 
-          Row(
-            children: [
-              Text(
-                _amountText(
-                  isDeposit: isDeposit,
-                  isTransfer: isTransfer,
-                  amount: amount,
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                Text(
+                  _amountText(
+                    isDeposit: isDeposit,
+                    isTransfer: isTransfer,
+                    amount: amount,
+                  ),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: mainColor,
+                  ),
                 ),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight:
-                  FontWeight.w900,
-                  color: mainColor,
+                Text(
+                  '잔액 ${_formatMoney(balanceAfter)}원',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF374151),
+                  ),
                 ),
-              ),
-
-              const Spacer(),
-
-              Text(
-                '잔액 ${_formatMoney(balanceAfter)}원',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight:
-                  FontWeight.w800,
-                  color:
-                  Color(0xFF374151),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -567,13 +481,12 @@ class _AssetTransactionListWidgetState
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: chipColor,
-        borderRadius:
-        BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: FontWeight.w900,
           color: mainColor,
         ),
@@ -587,19 +500,14 @@ class _AssetTransactionListWidgetState
     required String memo,
     required String accountType,
   }) {
-    final String accountLabel =
-    _accountTypeLabel(accountType);
+    final String accountLabel = _accountTypeLabel(accountType);
 
-    final String detailText =
-    memo.isEmpty
-        ? _transactionReasonLabel(
-      reason,
-    )
+    final String detailText = memo.isEmpty
+        ? _transactionReasonLabel(reason)
         : memo;
 
     return Column(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           rowTitle,
@@ -614,11 +522,9 @@ class _AssetTransactionListWidgetState
         const SizedBox(height: 3),
 
         Text(
-          accountLabel.isEmpty
-              ? detailText
-              : '$accountLabel · $detailText',
+          accountLabel.isEmpty ? detailText : '$accountLabel · $detailText',
           style: const TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
             color: Color(0xFF6B7280),
           ),
@@ -640,9 +546,7 @@ class _AssetTransactionListWidgetState
     return '${isDeposit ? '+' : '-'}${_formatMoney(amount)}원';
   }
 
-  static String _accountTypeLabel(
-      String accountType,
-      ) {
+  static String _accountTypeLabel(String accountType) {
     switch (accountType) {
       case 'bank':
         return '생활 현금';
@@ -657,10 +561,15 @@ class _AssetTransactionListWidgetState
     }
   }
 
-  static String _transactionReasonShortLabel(
-      String reason,
-      ) {
+  static String _transactionReasonShortLabel(String reason) {
     switch (reason) {
+      case 'loan_disbursement':
+      case 'credit_loan_disbursement':
+        return '대출';
+      case 'loan_repayment':
+      case 'credit_loan_repayment':
+        return '대출상환';
+
       case 'point_to_asset':
         return '포인트';
 
@@ -694,16 +603,21 @@ class _AssetTransactionListWidgetState
         return '부동산';
 
       default:
-        return reason.isEmpty
-            ? '-'
-            : reason;
+        return reason.isEmpty ? '-' : '거래';
     }
   }
 
-  static String _transactionReasonLabel(
-      String reason,
-      ) {
+  static String _transactionReasonLabel(String reason) {
     switch (reason) {
+      case 'loan_disbursement':
+        return '예금담보대출 입금';
+      case 'loan_repayment':
+        return '예금담보대출 상환';
+      case 'credit_loan_disbursement':
+        return '신용대출 입금';
+      case 'credit_loan_repayment':
+        return '신용대출 상환';
+
       case 'point_to_asset':
         return '포인트 입금';
 
@@ -747,56 +661,35 @@ class _AssetTransactionListWidgetState
         return '부동산 매도';
 
       default:
-        return reason.isEmpty
-            ? '-'
-            : reason;
+        return reason.isEmpty ? '-' : '계좌 거래';
     }
   }
 
-  static String _formatMoney(
-      double value,
-      ) {
-    return NumberFormat('#,###').format(
-      value.floor(),
-    );
+  static String _formatMoney(double value) {
+    return NumberFormat('#,###').format(value.floor());
   }
 
-  static String _formatDateTime(
-      DateTime dateTime,
-      ) {
-    return DateFormat(
-      'MM.dd HH:mm',
-    ).format(
-      dateTime.toLocal(),
-    );
+  static String _formatDateTime(DateTime dateTime) {
+    return DateFormat('MM.dd HH:mm').format(dateTime.toLocal());
   }
 
-  static DateTime? _toNullableDateTime(
-      dynamic value,
-      ) {
+  static DateTime? _toNullableDateTime(dynamic value) {
     if (value == null) return null;
 
     if (value is DateTime) {
       return value;
     }
 
-    return DateTime.tryParse(
-      value.toString(),
-    );
+    return DateTime.tryParse(value.toString());
   }
 
-  static double _toDouble(
-      dynamic value,
-      ) {
+  static double _toDouble(dynamic value) {
     if (value == null) return 0;
 
     if (value is num) {
       return value.toDouble();
     }
 
-    return double.tryParse(
-      value.toString(),
-    ) ??
-        0;
+    return double.tryParse(value.toString()) ?? 0;
   }
 }
