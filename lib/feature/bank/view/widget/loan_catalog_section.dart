@@ -1,3 +1,4 @@
+import 'package:stock/feature/bank/view/widget/completed_loan_history_section.dart';
 import 'package:stock/feature/bank/view/widget/loan_auto_repayment_notice.dart';
 import 'dart:async';
 import 'dart:math';
@@ -32,6 +33,8 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
   bool _catalogRefreshQueued = false;
   String? _error;
   String _category = 'all';
+  String _loanView = 'active';
+  int _completedRefresh = 0;
 
   List<Map<String, dynamic>> _offers = [];
   Map<String, dynamic> _overview = {};
@@ -165,6 +168,11 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
             },
       ];
       setState(() {
+        final ids = loans.map((loan) => loan['id']).toSet();
+        if (_loanView == 'completed' &&
+            _ownedLoans.any((loan) => !ids.contains(loan['id']))) {
+          _completedRefresh++;
+        }
         _ownedError = null;
         _ownedLoans = loans;
         _clockMapping = result[2] as GameClockMapping?;
@@ -402,7 +410,11 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                 ),
               ),
               IconButton(
-                onPressed: _ownedLoading ? null : _loadOwnedLoans,
+                onPressed: _loanView == 'completed'
+                    ? () => setState(() => _completedRefresh++)
+                    : _ownedLoading
+                    ? null
+                    : _loadOwnedLoans,
                 icon: const Icon(Icons.refresh),
                 tooltip: '내 대출 새로고침',
               ),
@@ -410,11 +422,30 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
           ),
           const SizedBox(height: 4),
           const Text(
-            '이용 중인 대출과 상환 일정을 확인하고 관리하세요.',
+            '이용 중인 대출과 상환 완료 내역을 확인하고 관리하세요.',
             style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
           ),
           const SizedBox(height: 20),
-          if (_ownedLoading)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (id, label) in const [
+                ('active', '이용 중'),
+                ('completed', '상환 완료'),
+              ])
+                ChoiceChip(
+                  label: Text(label, style: const TextStyle(fontSize: 14)),
+                  selected: _loanView == id,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => _loanView = id),
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          if (_loanView == 'completed')
+            CompletedLoanHistorySection(key: ValueKey(_completedRefresh))
+          else if (_ownedLoading)
             const Padding(
               padding: EdgeInsets.all(24),
               child: Center(child: CircularProgressIndicator()),
@@ -460,7 +491,7 @@ class _LoanCatalogSectionState extends State<LoanCatalogSection> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    '아래 대출 상품에서 조건을 확인할 수 있습니다.',
+                    '상환을 마친 대출은 ‘상환 완료’에서 확인하세요.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: _muted, height: 1.5),
                   ),
